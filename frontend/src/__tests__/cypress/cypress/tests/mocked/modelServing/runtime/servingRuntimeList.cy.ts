@@ -1,12 +1,9 @@
-import {
-  mockAcceleratorProfile,
-  mockProjectScopedAcceleratorProfiles,
-} from '#~/__mocks__/mockAcceleratorProfile';
+import { mockAcceleratorProfile } from '#~/__mocks__/mockAcceleratorProfile';
 import { mockDashboardConfig } from '#~/__mocks__/mockDashboardConfig';
 import { mockDscStatus } from '#~/__mocks__/mockDscStatus';
 import { mockInferenceServiceK8sResource } from '#~/__mocks__/mockInferenceServiceK8sResource';
 import { mockK8sResourceList } from '#~/__mocks__/mockK8sResourceList';
-import { mock200Status, mock404Error, mock409Error } from '#~/__mocks__/mockK8sStatus';
+import { mock404Error, mock409Error } from '#~/__mocks__/mockK8sStatus';
 import { mockNotebookK8sResource } from '#~/__mocks__/mockNotebookK8sResource';
 import { mockPVCK8sResource } from '#~/__mocks__/mockPVCK8sResource';
 import { mockPodK8sResource } from '#~/__mocks__/mockPodK8sResource';
@@ -30,10 +27,6 @@ import {
   mockServingRuntimeTemplateK8sResource,
 } from '#~/__mocks__/mockServingRuntimeTemplateK8sResource';
 import {
-  createServingRuntimeModal,
-  editServingRuntimeModal,
-  inferenceServiceModal,
-  inferenceServiceModalEdit,
   kserveModal,
   kserveModalEdit,
   modelServingSection,
@@ -47,7 +40,6 @@ import type {
 } from '#~/k8sTypes';
 import { DeploymentMode } from '#~/k8sTypes';
 import { ServingRuntimePlatform, TolerationEffect, TolerationOperator } from '#~/types';
-import { deleteModal } from '#~/__tests__/cypress/cypress/pages/components/DeleteModal';
 import { StackCapability } from '#~/concepts/areas/types';
 import { mockDsciStatus } from '#~/__mocks__/mockDsciStatus';
 import {
@@ -73,8 +65,8 @@ import {
   mockGlobalScopedHardwareProfiles,
   mockProjectScopedHardwareProfiles,
 } from '#~/__mocks__/mockHardwareProfile';
-import { hardwareProfileSection } from '#~/__tests__/cypress/cypress/pages/components/HardwareProfileSection';
-import { acceleratorProfileSection } from '#~/__tests__/cypress/cypress/pages/components/subComponents/AcceleratorProfileSection';
+import { STOP_MODAL_PREFERENCE_KEY } from '#~/pages/modelServing/useStopModalPreference';
+import { mockOdhApplication } from '#~/__mocks__/mockOdhApplication';
 
 type HandlersProps = {
   disableKServeConfig?: boolean;
@@ -98,8 +90,6 @@ type HandlersProps = {
   disableProjectScoped?: boolean;
   disableHardwareProfiles?: boolean;
 };
-import { STOP_MODAL_PREFERENCE_KEY } from '#~/pages/modelServing/useStopModalPreference';
-import { mockOdhApplication } from '#~/__mocks__/mockOdhApplication';
 
 const initIntercepts = ({
   disableKServeConfig,
@@ -500,355 +490,130 @@ describe('Serving Runtime List', () => {
     });
   });
 
-  describe('ModelMesh', () => {
-    it('Deploy ModelMesh model', () => {
+  describe('KServe Auth', () => {
+    it('Kserve auth should be hidden when auth is disabled', () => {
       initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
         disableModelMeshConfig: false,
-        inferenceServices: [
-          mockInferenceServiceK8sResource({ name: 'test-inference', isModelMesh: true }),
-          mockInferenceServiceK8sResource({
-            name: 'another-inference-service',
-            displayName: 'Another Inference Service',
-            deleted: true,
-            isModelMesh: true,
-          }),
-          mockInferenceServiceK8sResource({
-            name: 'ovms-testing',
-            displayName: 'OVMS ONNX',
-            isModelMesh: true,
-          }),
-        ],
+        disableKServeConfig: false,
+        disableKServeAuthConfig: true,
+        servingRuntimes: [],
+        projectEnableModelMesh: false,
       });
 
       projectDetails.visitSection('test-project', 'model-server');
 
-      modelServingSection.getModelMeshRow('ovms').findDeployModelButton().click();
+      modelServingSection.findDeployModelButton().click();
 
-      inferenceServiceModal.shouldBeOpen();
+      kserveModal.shouldBeOpen();
 
       // test that you can not submit on empty
-      inferenceServiceModal.findSubmitButton().should('be.disabled');
+      kserveModal.findSubmitButton().should('be.disabled');
 
       // test filling in minimum required fields
-      inferenceServiceModal.findModelNameInput().type('Test Name');
-      inferenceServiceModal.findModelFrameworkSelect().findSelectOption('onnx - 1').click();
-      inferenceServiceModal.findSubmitButton().should('be.disabled');
-      inferenceServiceModal.findNewConnectionOption().click();
-      inferenceServiceModal.findConnectionNameInput().type('Test Name');
-      inferenceServiceModal.findConnectionFieldInput('URI').type('https://test');
-      inferenceServiceModal.findSubmitButton().should('be.enabled');
-      inferenceServiceModal.findExistingConnectionOption().click();
-      inferenceServiceModal.findExistingConnectionSelect().should('have.attr', 'disabled');
-      inferenceServiceModal.findLocationPathInput().type('test-model/');
-      inferenceServiceModal.findSubmitButton().should('be.enabled');
-
-      // test invalid resource name
-      inferenceServiceModal.k8sNameDescription.findResourceEditLink().click();
-      inferenceServiceModal.k8sNameDescription
-        .findResourceNameInput()
-        .should('have.attr', 'aria-invalid', 'false');
-      inferenceServiceModal.k8sNameDescription
-        .findResourceNameInput()
-        .should('have.value', 'test-name');
-      // Invalid character k8s names fail
-      inferenceServiceModal.k8sNameDescription
-        .findResourceNameInput()
-        .clear()
-        .type('InVaLiD vAlUe!');
-      inferenceServiceModal.k8sNameDescription
-        .findResourceNameInput()
-        .should('have.attr', 'aria-invalid', 'true');
-      inferenceServiceModal.findSubmitButton().should('be.disabled');
-      inferenceServiceModal.k8sNameDescription.findResourceNameInput().clear().type('test-name');
-      inferenceServiceModal.findSubmitButton().should('be.enabled');
-
-      inferenceServiceModal.findSubmitButton().click();
-
-      // dry run request
-      cy.wait('@createInferenceService').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.containSubset({
-          metadata: {
-            name: 'test-name',
-            namespace: 'test-project',
-            labels: { 'opendatahub.io/dashboard': 'true' },
-            annotations: {
-              'openshift.io/display-name': 'Test Name',
-              'serving.kserve.io/deploymentMode': DeploymentMode.ModelMesh,
-            },
-          },
-          spec: {
-            predictor: {
-              model: {
-                modelFormat: { name: 'onnx', version: '1' },
-                runtime: 'test-model-legacy',
-                storage: { key: 'test-secret', path: 'test-model/' },
-              },
-            },
-          },
-        });
-      });
-
-      // Actual request
-      cy.wait('@createInferenceService').then((interception) => {
-        expect(interception.request.url).not.to.include('?dryRun=All');
-      });
-
-      cy.get('@createInferenceService.all').then((interceptions) => {
-        expect(interceptions).to.have.length(2); // 1 dry-run request and 1 actual request
-      });
+      kserveModal.findModelNameInput().type('Test Name');
+      kserveModal.findServingRuntimeTemplateSearchSelector().click();
+      kserveModal.findGlobalScopedTemplateOption('Caikit').click();
+      kserveModal.findModelFrameworkSelect().findSelectOption('onnx - 1').click();
+      kserveModal.findSubmitButton().should('be.disabled');
+      // check external route, token should be checked and no alert
+      kserveModal.findAuthenticationCheckbox().should('not.exist');
     });
 
-    it('Edit ModelMesh model', () => {
+    it('show warning alert on modal, when authorino operator is not installed/enabled', () => {
       initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
         disableModelMeshConfig: false,
-        inferenceServices: [
-          mockInferenceServiceK8sResource({
-            name: 'ovms-testing',
-            displayName: 'OVMS ONNX',
-            isModelMesh: true,
-          }),
-        ],
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection
-        .getModelMeshRow('OVMS Model Serving')
-        .findDeployedModelExpansionButton()
-        .click();
-      modelServingSection.getInferenceServiceRow('OVMS ONNX').findKebabAction('Edit').click();
-      inferenceServiceModalEdit.shouldBeOpen();
-      inferenceServiceModalEdit
-        .findServingRuntimeSelect()
-        .should('have.text', 'OVMS Model Serving')
-        .should('be.enabled');
-      inferenceServiceModalEdit.findExistingConnectionSelect().should('have.attr', 'disabled');
-      inferenceServiceModalEdit
-        .findExistingConnectionSelect()
-        .findByRole('combobox')
-        .should('have.value', 'Test Secret');
-    });
-
-    it('ModelMesh ServingRuntime list', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
         disableKServeConfig: false,
-        disableModelMeshConfig: false,
-        inferenceServices: [
-          mockInferenceServiceK8sResource({ name: 'test-inference', isModelMesh: true }),
-          mockInferenceServiceK8sResource({
-            name: 'another-inference-service',
-            displayName: 'Another Inference Service',
-            statusPredictor: {
-              grpcUrl: 'grpc://modelmesh-serving.app:8033',
-              restUrl: 'http:///modelmesh-serving.app:8000',
-            },
-            deleted: true,
-            isModelMesh: true,
-          }),
-          mockInferenceServiceK8sResource({
-            name: 'ovms-testing',
-            displayName: 'OVMS ONNX',
-            activeModelState: 'FailedToLoad',
-            targetModelState: 'FailedToLoad',
-            isModelMesh: true,
-            lastFailureInfoMessage: 'Failed to pull model from storage due to error',
-          }),
-          mockInferenceServiceK8sResource({
-            name: 'loaded-model',
-            displayName: 'Loaded model',
-            activeModelState: 'Loaded',
-            isModelMesh: true,
-            lastFailureInfoMessage: 'Failed to pull model from storage due to error',
-          }),
-        ],
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-
-      // Check that the legacy serving runtime is shown with the default runtime name
-      modelServingSection.getModelMeshRow('ovms').find().should('exist');
-      // Check that the legacy serving runtime displays the correct Serving Runtime
-      modelServingSection.getModelMeshRow('ovms').shouldHaveServingRuntime('OpenVINO Model Server');
-      // Check that the legacy serving runtime has tokens disabled
-      modelServingSection.getModelMeshRow('ovms').shouldHaveTokens(false);
-
-      modelServingSection.getModelMeshRow('ovms').findExpansion().should(be.collapsed);
-      modelServingSection.getModelMeshRow('ovms').findExpandButton().click();
-      modelServingSection.getModelMeshRow('ovms').findExpansion().should(be.expanded);
-
-      // Check that the serving runtime is shown with the default runtime name
-      modelServingSection.getModelMeshRow('OVMS Model Serving').find().should('exist');
-      // Check that the serving runtime displays the correct Serving Runtime
-      modelServingSection
-        .getModelMeshRow('OVMS Model Serving')
-        .shouldHaveServingRuntime('OpenVINO Serving Runtime (Supports GPUs)');
-
-      // Check status of deployed model
-      modelServingSection
-        .getModelMeshRow('OVMS Model Serving')
-        .findDeployedModelExpansionButton()
-        .click();
-      modelServingSection.findInferenceServiceTable().should('exist');
-      let inferenceServiceRow = modelServingSection.getInferenceServiceRow('OVMS ONNX');
-      inferenceServiceRow.findStatusLabel('Failed');
-      inferenceServiceRow.findStatusTooltip();
-      inferenceServiceRow.findStatusTooltipValue('Failed to pull model from storage due to error');
-
-      // Check status of deployed model which loaded successfully after an error
-      inferenceServiceRow = modelServingSection.getInferenceServiceRow('Loaded model');
-      inferenceServiceRow.findStatusLabel('Started');
-      inferenceServiceRow.findStatusTooltip().should('be.visible');
-      inferenceServiceRow.findStatusTooltipValue('Model deployment is active.');
-
-      // Check API protocol in row
-      inferenceServiceRow.findAPIProtocol().should('have.text', 'REST');
-
-      // sort by modelName
-      modelServingSection
-        .findInferenceServiceTableHeaderButton('Model deployment name')
-        .should(be.sortAscending);
-      modelServingSection.findInferenceServiceTableHeaderButton('Model deployment name').click();
-      modelServingSection
-        .findInferenceServiceTableHeaderButton('Model deployment name')
-        .should(be.sortDescending);
-    });
-
-    it('modelmesh inference endpoints when external route is enabled', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-        inferenceServices: [
-          mockInferenceServiceK8sResource({
-            name: 'another-inference-service',
-            displayName: 'Another Inference Service',
-            statusPredictor: {
-              grpcUrl: 'grpc://modelmesh-serving.app:8033',
-              restUtl: 'http:///modelmesh-serving.app:8000',
-            },
-            deleted: true,
-            isModelMesh: true,
-            activeModelState: 'Loaded',
-          }),
-        ],
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-      modelServingSection
-        .getModelMeshRow('OVMS Model Serving')
-        .findDeployedModelExpansionButton()
-        .click();
-      const inferenceServiceRow = modelServingSection.getInferenceServiceRow(
-        'Another Inference Service',
-      );
-      inferenceServiceRow.findExternalServiceButton().click();
-      inferenceServiceRow.findExternalServicePopover().findByText('Internal').should('exist');
-      inferenceServiceRow
-        .findExternalServicePopover()
-        .findByText('grpc://modelmesh-serving.app:8033')
-        .should('exist');
-      inferenceServiceRow
-        .findExternalServicePopover()
-        .findByText('http:///modelmesh-serving.app:8000')
-        .should('exist');
-      inferenceServiceRow.findExternalServicePopover().findByText('External').should('exist');
-      inferenceServiceRow
-        .findExternalServicePopover()
-        .findByText('https://another-inference-service-test-project.apps.user.com/infer')
-        .should('exist');
-    });
-
-    it('Display only project scoped label on deployments table', () => {
-      initIntercepts({
+        disableKServeAuthConfig: false,
+        servingRuntimes: [],
         projectEnableModelMesh: false,
-        disableKServeConfig: false,
-        disableModelMeshConfig: true,
-        disableProjectScoped: false,
-        servingRuntimes: [
-          mockServingRuntimeK8sResource({
-            isProjectScoped: true,
-            scope: 'project',
-            templateDisplayName: 'test-project-scoped-sr',
-          }),
-        ],
-        inferenceServices: [
-          mockInferenceServiceK8sResource({ displayName: 'Test Inference Service' }),
-        ],
       });
 
       projectDetails.visitSection('test-project', 'model-server');
-      modelServingSection
-        .getKServeRow('Test Inference Service')
-        .find()
-        .findByText('test-project-scoped-sr')
-        .should('exist');
 
-      modelServingSection
-        .getKServeRow('Test Inference Service')
-        .findProjectScopedLabel()
-        .should('exist');
+      modelServingSection.findDeployModelButton().click();
+
+      kserveModal.shouldBeOpen();
+      kserveModal.findAuthorinoNotEnabledAlert().should('exist');
+      kserveModal.findModelRouteCheckbox().should('not.be.checked');
+      kserveModal.findModelRouteCheckbox().check();
+      kserveModal.findTokenAuthAlert().should('exist');
+      kserveModal.findModelRouteCheckbox().uncheck();
+      kserveModal.findTokenAuthAlert().should('not.exist');
     });
 
-    it('modelmesh inference endpoints when external route is not enabled', () => {
+    it('Kserve auth should be hidden when no required capabilities', () => {
       initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
         disableModelMeshConfig: false,
-        inferenceServices: [
-          mockInferenceServiceK8sResource({
-            name: 'another-inference-service',
-            displayName: 'Another Inference Service',
-            statusPredictor: {
-              grpcUrl: 'grpc://modelmesh-serving.app:8033',
-              restUtl: 'http:///modelmesh-serving.app:8000',
-            },
-            deleted: true,
-            isModelMesh: true,
-            activeModelState: 'Loaded',
-          }),
-        ],
-        servingRuntimes: [
-          mockServingRuntimeK8sResourceLegacy({}),
-          mockServingRuntimeK8sResource({
-            name: 'test-model',
-            namespace: 'test-project',
-            auth: true,
-            route: false,
-          }),
-        ],
+        disableKServeConfig: false,
+        disableKServeAuthConfig: false,
+        servingRuntimes: [],
+        requiredCapabilities: [],
+        projectEnableModelMesh: false,
       });
 
       projectDetails.visitSection('test-project', 'model-server');
-      modelServingSection
-        .getModelMeshRow('OVMS Model Serving')
-        .findDeployedModelExpansionButton()
-        .click();
-      const inferenceServiceRow = modelServingSection.getInferenceServiceRow(
-        'Another Inference Service',
+
+      modelServingSection.findDeployModelButton().click();
+
+      kserveModal.shouldBeOpen();
+
+      // check external route, token should be checked and no alert
+      kserveModal.findAuthenticationCheckbox().should('not.exist');
+    });
+
+    it('Kserve auth should be enabled if capabilities are prsent', () => {
+      initIntercepts({
+        disableModelMeshConfig: false,
+        disableKServeConfig: false,
+        disableKServeAuthConfig: false,
+        servingRuntimes: [],
+        requiredCapabilities: [StackCapability.SERVICE_MESH, StackCapability.SERVICE_MESH_AUTHZ],
+        projectEnableModelMesh: false,
+      });
+
+      projectDetails.visitSection('test-project', 'model-server');
+
+      modelServingSection.findDeployModelButton().click();
+
+      kserveModal.shouldBeOpen();
+
+      // check external route, token should be checked and no alert
+      kserveModal.findAuthenticationCheckbox().should('exist');
+    });
+
+    it('Check authentication section', () => {
+      initIntercepts({
+        disableModelMeshConfig: false,
+        disableKServeConfig: false,
+        servingRuntimes: [],
+        requiredCapabilities: [StackCapability.SERVICE_MESH, StackCapability.SERVICE_MESH_AUTHZ],
+        projectEnableModelMesh: false,
+      });
+      projectDetails.visitSection('test-project', 'model-server');
+
+      modelServingSection.findDeployModelButton().click();
+
+      kserveModal.shouldBeOpen();
+
+      kserveModal.findSubmitButton().should('be.disabled');
+
+      // Test labels are correct
+      expect(
+        kserveModal.findAuthenticationSection().findByText('Token authentication').should('exist'),
       );
-      inferenceServiceRow.findInternalServiceButton().click();
-      inferenceServiceRow.findInternalServicePopover().findByText('Internal').should('exist');
-      inferenceServiceRow
-        .findInternalServicePopover()
-        .findByText('grpc://modelmesh-serving.app:8033')
-        .should('exist');
-      inferenceServiceRow
-        .findInternalServicePopover()
-        .findByText('http:///modelmesh-serving.app:8000')
-        .should('exist');
+      expect(
+        kserveModal
+          .findAuthenticationSection()
+          .findByText('Require token authentication')
+          .should('exist'),
+      );
     });
   });
 
-  describe('KServe', () => {
+  describe('KServe Models', () => {
     it('Deploy KServe model', () => {
       initIntercepts({
-        disableModelMeshConfig: false,
+        disableModelMeshConfig: true,
         disableKServeConfig: false,
         disableServingRuntimeParams: false,
         servingRuntimes: [],
@@ -1131,96 +896,6 @@ describe('Serving Runtime List', () => {
       });
     });
 
-    it('Kserve auth should be hidden when auth is disabled', () => {
-      initIntercepts({
-        disableModelMeshConfig: false,
-        disableKServeConfig: false,
-        disableKServeAuthConfig: true,
-        servingRuntimes: [],
-        projectEnableModelMesh: false,
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findDeployModelButton().click();
-
-      kserveModal.shouldBeOpen();
-
-      // test that you can not submit on empty
-      kserveModal.findSubmitButton().should('be.disabled');
-
-      // test filling in minimum required fields
-      kserveModal.findModelNameInput().type('Test Name');
-      kserveModal.findServingRuntimeTemplateSearchSelector().click();
-      kserveModal.findGlobalScopedTemplateOption('Caikit').click();
-      kserveModal.findModelFrameworkSelect().findSelectOption('onnx - 1').click();
-      kserveModal.findSubmitButton().should('be.disabled');
-      // check external route, token should be checked and no alert
-      kserveModal.findAuthenticationCheckbox().should('not.exist');
-    });
-
-    it('show warning alert on modal, when authorino operator is not installed/enabled', () => {
-      initIntercepts({
-        disableModelMeshConfig: false,
-        disableKServeConfig: false,
-        disableKServeAuthConfig: false,
-        servingRuntimes: [],
-        projectEnableModelMesh: false,
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findDeployModelButton().click();
-
-      kserveModal.shouldBeOpen();
-      kserveModal.findAuthorinoNotEnabledAlert().should('exist');
-      kserveModal.findModelRouteCheckbox().should('not.be.checked');
-      kserveModal.findModelRouteCheckbox().check();
-      kserveModal.findTokenAuthAlert().should('exist');
-      kserveModal.findModelRouteCheckbox().uncheck();
-      kserveModal.findTokenAuthAlert().should('not.exist');
-    });
-
-    it('Kserve auth should be hidden when no required capabilities', () => {
-      initIntercepts({
-        disableModelMeshConfig: false,
-        disableKServeConfig: false,
-        disableKServeAuthConfig: false,
-        servingRuntimes: [],
-        requiredCapabilities: [],
-        projectEnableModelMesh: false,
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findDeployModelButton().click();
-
-      kserveModal.shouldBeOpen();
-
-      // check external route, token should be checked and no alert
-      kserveModal.findAuthenticationCheckbox().should('not.exist');
-    });
-
-    it('Kserve auth should be enabled if capabilities are prsent', () => {
-      initIntercepts({
-        disableModelMeshConfig: false,
-        disableKServeConfig: false,
-        disableKServeAuthConfig: false,
-        servingRuntimes: [],
-        requiredCapabilities: [StackCapability.SERVICE_MESH, StackCapability.SERVICE_MESH_AUTHZ],
-        projectEnableModelMesh: false,
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findDeployModelButton().click();
-
-      kserveModal.shouldBeOpen();
-
-      // check external route, token should be checked and no alert
-      kserveModal.findAuthenticationCheckbox().should('exist');
-    });
-
     it('Do not deploy KServe model when user cannot edit namespace (only one serving platform enabled)', () => {
       // If only one platform is enabled, project platform selection has not happened yet and patching the namespace with the platform happens at deploy time.
       initIntercepts({
@@ -1284,7 +959,7 @@ describe('Serving Runtime List', () => {
             name: 'llama-service',
             displayName: 'Llama Service',
             modelName: 'llama-service',
-            isModelMesh: false,
+            //isModelMesh: false,
             args: ['--arg=value'],
             env: [{ name: 'test-name', value: 'test-value' }],
           }),
@@ -1718,56 +1393,6 @@ describe('Serving Runtime List', () => {
         .should('have.text', '3');
     });
 
-    it('Successfully deletes Model Mesh model server', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-        inferenceServices: [
-          mockInferenceServiceK8sResource({ name: 'test-inference', isModelMesh: true }),
-          mockInferenceServiceK8sResource({
-            name: 'ovms-testing',
-            displayName: 'OVMS ONNX',
-            isModelMesh: true,
-          }),
-        ],
-      });
-      cy.interceptK8s(
-        'DELETE',
-        { model: ServingRuntimeModel, ns: 'test-project', name: 'test-model-legacy' },
-        mock200Status({}),
-      ).as('deleteServingRuntimes');
-      cy.interceptK8s(
-        'DELETE',
-        {
-          model: ServiceAccountModel,
-          ns: 'test-project',
-          name: 'test-model-legacy-sa',
-        },
-        mock200Status({}),
-      ).as('deleteServiceAccounts');
-      cy.interceptK8s(
-        'DELETE',
-        {
-          model: RoleBindingModel,
-          ns: 'test-project',
-          name: 'test-model-legacy-view',
-        },
-        mock200Status({}),
-      ).as('deleteRoleBindings');
-      projectDetails.visitSection('test-project', 'model-server');
-      modelServingSection.getModelMeshRow('ovms').findKebabAction('Delete model server').click();
-      deleteModal.shouldBeOpen();
-      deleteModal.findSubmitButton().should('be.disabled');
-
-      deleteModal.findInput().type('test-model-legacy');
-      deleteModal.findSubmitButton().should('be.enabled');
-      deleteModal.findSubmitButton().click();
-      cy.wait('@deleteServingRuntimes');
-      cy.wait('@deleteServiceAccounts');
-      cy.wait('@deleteRoleBindings');
-    });
-
     it('Check path error in KServe Modal', () => {
       initIntercepts({
         disableModelMeshConfig: false,
@@ -1826,364 +1451,6 @@ describe('Serving Runtime List', () => {
 
       kserveModal.findLocationPathInput().type('correct-path');
       kserveModal.findSubmitButton().should('be.enabled');
-    });
-
-    it('Check authentication section', () => {
-      initIntercepts({
-        disableModelMeshConfig: false,
-        disableKServeConfig: false,
-        servingRuntimes: [],
-        requiredCapabilities: [StackCapability.SERVICE_MESH, StackCapability.SERVICE_MESH_AUTHZ],
-        projectEnableModelMesh: false,
-      });
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findDeployModelButton().click();
-
-      kserveModal.shouldBeOpen();
-
-      kserveModal.findSubmitButton().should('be.disabled');
-
-      // Test labels are correct
-      expect(
-        kserveModal.findAuthenticationSection().findByText('Token authentication').should('exist'),
-      );
-      expect(
-        kserveModal
-          .findAuthenticationSection()
-          .findByText('Require token authentication')
-          .should('exist'),
-      );
-    });
-
-    it('Deploy KServe raw model (with serverless available)', () => {
-      initIntercepts({
-        disableModelMeshConfig: false,
-        disableKServeConfig: false,
-        disableServingRuntimeParams: false,
-        servingRuntimes: [],
-        requiredCapabilities: [StackCapability.SERVICE_MESH, StackCapability.SERVICE_MESH_AUTHZ],
-        projectEnableModelMesh: false,
-      });
-      cy.interceptOdh(
-        'GET /api/config',
-        mockDashboardConfig({
-          disableKServeRaw: false,
-        }),
-      );
-
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findDeployModelButton().click();
-
-      kserveModal.shouldBeOpen();
-
-      // test that you can not submit on empty
-      kserveModal.findSubmitButton().should('be.disabled');
-
-      // test filling in minimum required fields
-      kserveModal.findModelNameInput().type('Test Name');
-      kserveModal.findServingRuntimeTemplateSearchSelector().click();
-      kserveModal.findGlobalScopedTemplateOption('Caikit').click();
-      kserveModal.findModelFrameworkSelect().findSelectOption('onnx - 1').click();
-      kserveModal.findSubmitButton().should('be.disabled');
-      // misc.
-      kserveModal.findModelRouteCheckbox().check();
-      kserveModal.findAuthenticationCheckbox().check();
-      kserveModal.findExternalRouteError().should('not.exist');
-      kserveModal.findServiceAccountNameInput().should('have.value', 'default-name');
-      kserveModal.findExistingConnectionOption().click();
-      kserveModal.findExistingConnectionSelect().should('have.attr', 'disabled');
-      kserveModal
-        .findExistingConnectionSelect()
-        .findByRole('combobox')
-        .should('have.value', 'Test Secret');
-      kserveModal.findLocationPathInput().type('test-model/');
-      kserveModal.findSubmitButton().should('be.enabled');
-      // raw
-      kserveModal.findDeploymentModeSelect().should('contain.text', 'Knative Serverless');
-
-      // Test Knative Serverless mode replica settings
-      kserveModal.findMinReplicasInput().should('have.value', '1');
-      kserveModal.findMinReplicasPlusButton().should('be.disabled');
-      kserveModal.findMaxReplicasInput().should('have.value', '1');
-      kserveModal.findMaxReplicasMinusButton().should('be.disabled');
-      kserveModal.findMaxReplicasPlusButton().click();
-      kserveModal.findMaxReplicasInput().should('have.value', '2');
-      kserveModal.findMinReplicasPlusButton().click();
-      kserveModal.findMinReplicasInput().should('have.value', '2');
-
-      // Test max replicas error message
-      kserveModal.findMaxReplicasInput().clear().type('1');
-      kserveModal.findMaxReplicasErrorMessage().should('exist');
-      kserveModal.findMaxReplicasInput().type('6');
-      kserveModal.findMaxReplicasErrorMessage().should('not.exist');
-
-      // Test min replicas error message
-      kserveModal.findMaxReplicasInput().clear().type('6');
-      kserveModal.findMinReplicasInput().clear().type('8');
-      kserveModal.findMinReplicasErrorMessage().should('exist');
-      kserveModal.findSubmitButton().should('be.disabled');
-      kserveModal.findMinReplicasInput().clear().type('4');
-      kserveModal.findMinReplicasErrorMessage().should('not.exist');
-      kserveModal.findSubmitButton().should('be.enabled');
-
-      // Test max limit of 99
-      kserveModal.findMaxReplicasInput().clear().type('100');
-      kserveModal.findMaxReplicasInput().should('have.value', '99');
-      kserveModal.findMaxReplicasPlusButton().should('be.disabled');
-      kserveModal.findDeploymentModeSelect().findSelectOption('KServe RawDeployment').click();
-
-      // test submitting form, the modal should close to indicate success.
-      kserveModal.findSubmitButton().click();
-      kserveModal.shouldBeOpen(false);
-
-      // dry run request
-      cy.wait('@createServingRuntime').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.containSubset({
-          metadata: {
-            name: 'test-name',
-            annotations: {
-              'openshift.io/display-name': 'test-name',
-              'opendatahub.io/apiProtocol': 'REST',
-              'opendatahub.io/template-name': 'template-2',
-              'opendatahub.io/template-display-name': 'Caikit',
-              'opendatahub.io/accelerator-name': '',
-            },
-            namespace: 'test-project',
-          },
-          spec: {
-            protocolVersions: ['grpc-v1'],
-            supportedModelFormats: [
-              { autoSelect: true, name: 'openvino_ir', version: 'opset1' },
-              { autoSelect: true, name: 'onnx', version: '1' },
-            ],
-          },
-        });
-      });
-
-      // Actual request
-      cy.wait('@createServingRuntime').then((interception) => {
-        expect(interception.request.url).not.to.include('?dryRun=All');
-      });
-
-      // the serving runtime should have been created
-      cy.get('@createServingRuntime.all').then((interceptions) => {
-        expect(interceptions).to.have.length(2); // 1 dry-run request and 1 actual request
-      });
-
-      cy.wait('@createInferenceService').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.containSubset({
-          apiVersion: 'serving.kserve.io/v1beta1',
-          kind: 'InferenceService',
-          metadata: {
-            name: 'test-name',
-            namespace: 'test-project',
-            annotations: {
-              'openshift.io/display-name': 'Test Name',
-              'serving.kserve.io/deploymentMode': DeploymentMode.RawDeployment,
-              'security.opendatahub.io/enable-auth': 'true',
-            },
-            labels: {
-              'opendatahub.io/dashboard': 'true',
-              'networking.kserve.io/visibility': 'exposed',
-            },
-          },
-          spec: {
-            predictor: {
-              minReplicas: 4,
-              maxReplicas: 4,
-              model: {
-                modelFormat: { name: 'onnx', version: '1' },
-                runtime: 'test-name',
-                storage: { key: 'test-secret', path: 'test-model/' },
-                resources: {
-                  requests: { cpu: '1', memory: '4Gi' },
-                  limits: { cpu: '2', memory: '8Gi' },
-                },
-              },
-            },
-          },
-        });
-      });
-
-      //dry run request
-      cy.wait('@createRole').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.containSubset({
-          metadata: {
-            name: 'test-name-view-role',
-            namespace: 'test-project',
-            ownerReferences: [],
-          },
-          rules: [
-            {
-              verbs: ['get'],
-              apiGroups: ['serving.kserve.io'],
-              resources: ['inferenceservices'],
-              resourceNames: ['test-name'],
-            },
-          ],
-        });
-      });
-
-      //Actual request
-      cy.wait('@createRole').then((interception) => {
-        expect(interception.request.url).not.to.include('?dryRun=All');
-      });
-
-      cy.get('@createRole.all').then((interceptions) => {
-        expect(interceptions).to.have.length(2); //1 dry run request and 1 actual request
-      });
-    });
-
-    it('Deploy KServe raw model (with serverless disabled)', () => {
-      initIntercepts({
-        disableModelMeshConfig: false,
-        disableKServeConfig: false,
-        disableServingRuntimeParams: false,
-        disableKServeRaw: false,
-        servingRuntimes: [],
-        requiredCapabilities: [],
-        projectEnableModelMesh: false,
-        DscComponents: { kserve: { serverlessMode: 'Removed' } },
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findDeployModelButton().click();
-
-      kserveModal.shouldBeOpen();
-
-      // test that you can not submit on empty
-      kserveModal.findSubmitButton().should('be.disabled');
-
-      // test filling in minimum required fields
-      kserveModal.findModelNameInput().type('Test Name');
-      kserveModal.findServingRuntimeTemplateSearchSelector().click();
-      kserveModal.findGlobalScopedTemplateOption('Caikit').click();
-      kserveModal.findModelFrameworkSelect().findSelectOption('onnx - 1').click();
-      kserveModal.findSubmitButton().should('be.disabled');
-      // misc.
-      kserveModal.findModelRouteCheckbox().check();
-      kserveModal.findAuthenticationCheckbox().check();
-      kserveModal.findExternalRouteError().should('not.exist');
-      kserveModal.findServiceAccountNameInput().should('have.value', 'default-name');
-      kserveModal.findExistingConnectionOption().click();
-      kserveModal.findExistingConnectionSelect().should('have.attr', 'disabled');
-      kserveModal
-        .findExistingConnectionSelect()
-        .findByRole('combobox')
-        .should('have.value', 'Test Secret');
-      kserveModal.findLocationPathInput().type('test-model/');
-      kserveModal.findSubmitButton().should('be.enabled');
-      // raw
-
-      // test submitting form, the modal should close to indicate success.
-      kserveModal.findSubmitButton().click();
-      kserveModal.shouldBeOpen(false);
-
-      // dry run request
-      cy.wait('@createServingRuntime').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.containSubset({
-          metadata: {
-            name: 'test-name',
-            annotations: {
-              'openshift.io/display-name': 'test-name',
-              'opendatahub.io/apiProtocol': 'REST',
-              'opendatahub.io/template-name': 'template-2',
-              'opendatahub.io/template-display-name': 'Caikit',
-              'opendatahub.io/accelerator-name': '',
-            },
-            namespace: 'test-project',
-          },
-          spec: {
-            protocolVersions: ['grpc-v1'],
-            supportedModelFormats: [
-              { autoSelect: true, name: 'openvino_ir', version: 'opset1' },
-              { autoSelect: true, name: 'onnx', version: '1' },
-            ],
-          },
-        });
-      });
-
-      // Actual request
-      cy.wait('@createServingRuntime').then((interception) => {
-        expect(interception.request.url).not.to.include('?dryRun=All');
-      });
-
-      // the serving runtime should have been created
-      cy.get('@createServingRuntime.all').then((interceptions) => {
-        expect(interceptions).to.have.length(2); // 1 dry-run request and 1 actual request
-      });
-
-      cy.wait('@createInferenceService').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.containSubset({
-          apiVersion: 'serving.kserve.io/v1beta1',
-          kind: 'InferenceService',
-          metadata: {
-            name: 'test-name',
-            namespace: 'test-project',
-            annotations: {
-              'openshift.io/display-name': 'Test Name',
-              'serving.kserve.io/deploymentMode': DeploymentMode.RawDeployment,
-              'security.opendatahub.io/enable-auth': 'true',
-            },
-            labels: {
-              'opendatahub.io/dashboard': 'true',
-              'networking.kserve.io/visibility': 'exposed',
-            },
-          },
-          spec: {
-            predictor: {
-              minReplicas: 1,
-              maxReplicas: 1,
-              model: {
-                modelFormat: { name: 'onnx', version: '1' },
-                runtime: 'test-name',
-                storage: { key: 'test-secret', path: 'test-model/' },
-                resources: {
-                  requests: { cpu: '1', memory: '4Gi' },
-                  limits: { cpu: '2', memory: '8Gi' },
-                },
-              },
-            },
-          },
-        });
-      });
-
-      //dry run request
-      cy.wait('@createRole').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.containSubset({
-          metadata: {
-            name: 'test-name-view-role',
-            namespace: 'test-project',
-            ownerReferences: [],
-          },
-          rules: [
-            {
-              verbs: ['get'],
-              apiGroups: ['serving.kserve.io'],
-              resources: ['inferenceservices'],
-              resourceNames: ['test-name'],
-            },
-          ],
-        });
-      });
-
-      //Actual request
-      cy.wait('@createRole').then((interception) => {
-        expect(interception.request.url).not.to.include('?dryRun=All');
-      });
-
-      cy.get('@createRole.all').then((interceptions) => {
-        expect(interceptions).to.have.length(2); //1 dry run request and 1 actual request
-      });
     });
 
     it('Check environment variables validation in KServe Modal', () => {
@@ -2492,720 +1759,6 @@ describe('Serving Runtime List', () => {
     });
   });
 
-  describe('ModelMesh model server', () => {
-    it('Add ModelMesh model server', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-        inferenceServices: [
-          mockInferenceServiceK8sResource({ name: 'test-inference', isModelMesh: true }),
-          mockInferenceServiceK8sResource({
-            name: 'another-inference-service',
-            displayName: 'Another Inference Service',
-            deleted: true,
-            isModelMesh: true,
-          }),
-          mockInferenceServiceK8sResource({
-            name: 'ovms-testing',
-            displayName: 'OVMS ONNX',
-            isModelMesh: true,
-          }),
-        ],
-      });
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findAddModelServerButton().click();
-
-      createServingRuntimeModal.shouldBeOpen();
-
-      // test that you can not submit on empty
-      createServingRuntimeModal.findSubmitButton().should('be.disabled');
-
-      // test filling in minimum required fields
-      createServingRuntimeModal.k8sNameDescription.findDisplayNameInput().type('Test Name');
-      createServingRuntimeModal.findServingRuntimeTemplateSearchSelector().click();
-      createServingRuntimeModal.findGlobalScopedTemplateOption('New OVMS Server').click();
-      createServingRuntimeModal.findSubmitButton().should('be.enabled');
-
-      // test invalid resource name
-      createServingRuntimeModal.k8sNameDescription.findResourceEditLink().click();
-      createServingRuntimeModal.k8sNameDescription
-        .findResourceNameInput()
-        .should('have.attr', 'aria-invalid', 'false');
-      createServingRuntimeModal.k8sNameDescription
-        .findResourceNameInput()
-        .should('have.value', 'test-name');
-      // Invalid character k8s names fail
-      createServingRuntimeModal.k8sNameDescription
-        .findResourceNameInput()
-        .clear()
-        .type('InVaLiD vAlUe!');
-      createServingRuntimeModal.k8sNameDescription
-        .findResourceNameInput()
-        .should('have.attr', 'aria-invalid', 'true');
-      createServingRuntimeModal.findSubmitButton().should('be.disabled');
-      createServingRuntimeModal.k8sNameDescription
-        .findResourceNameInput()
-        .clear()
-        .type('test-name');
-      createServingRuntimeModal.findSubmitButton().should('be.enabled');
-
-      // test the if the alert is visible when route is external while token is not set
-      createServingRuntimeModal.findModelRouteCheckbox().should('not.be.checked');
-      createServingRuntimeModal.findAuthenticationCheckbox().should('not.be.checked');
-      createServingRuntimeModal.findExternalRouteError().should('not.exist');
-      // check external route, token should be checked and no alert
-      createServingRuntimeModal.findModelRouteCheckbox().check();
-      createServingRuntimeModal.findAuthenticationCheckbox().should('be.checked');
-      createServingRuntimeModal.findExternalRouteError().should('not.exist');
-      createServingRuntimeModal.findServiceAccountNameInput().should('have.value', 'default-name');
-      // check external route, uncheck token, show alert
-      createServingRuntimeModal.findAuthenticationCheckbox().uncheck();
-      createServingRuntimeModal.findExternalRouteError().should('exist');
-      // internal route, set token, no alert
-      createServingRuntimeModal.findModelRouteCheckbox().uncheck();
-      createServingRuntimeModal.findAuthenticationCheckbox().check();
-      createServingRuntimeModal.findExternalRouteError().should('not.exist');
-
-      createServingRuntimeModal.findSubmitButton().should('be.enabled');
-      createServingRuntimeModal.findSubmitButton().click();
-
-      //dry run request
-      cy.wait('@createServiceAccount').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.eql({
-          apiVersion: 'v1',
-          kind: 'ServiceAccount',
-          metadata: { name: 'test-name-sa', namespace: 'test-project', ownerReferences: [] },
-        });
-      });
-
-      //Actual request
-      cy.wait('@createServiceAccount').then((interception) => {
-        expect(interception.request.url).not.to.include('?dryRun=All');
-      });
-
-      cy.get('@createServiceAccount.all').then((interceptions) => {
-        expect(interceptions).to.have.length(2); //1 dry run request and 1 actual request
-      });
-
-      //dry run request
-      cy.wait('@createRoleBinding').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.containSubset({
-          metadata: {
-            name: 'test-name-view',
-            namespace: 'test-project',
-            ownerReferences: [],
-          },
-          roleRef: { apiGroup: 'rbac.authorization.k8s.io', kind: 'ClusterRole', name: 'view' },
-          subjects: [{ kind: 'ServiceAccount', name: 'test-name-sa' }],
-        });
-      });
-
-      //Actual request
-      cy.wait('@createRoleBinding').then((interception) => {
-        expect(interception.request.url).not.to.include('?dryRun=All');
-      });
-
-      cy.get('@createRoleBinding.all').then((interceptions) => {
-        expect(interceptions).to.have.length(2); //1 dry run request and 1 actual request
-      });
-    });
-
-    it('should display accelerator profile selection when both accelerator profile and project-scoped feature flag is enabled for Model mesh, while adding model server', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-        disableProjectScoped: false,
-        inferenceServices: [
-          mockInferenceServiceK8sResource({ name: 'test-inference', isModelMesh: true }),
-          mockInferenceServiceK8sResource({
-            name: 'another-inference-service',
-            displayName: 'Another Inference Service',
-            deleted: true,
-            isModelMesh: true,
-          }),
-          mockInferenceServiceK8sResource({
-            name: 'ovms-testing',
-            displayName: 'OVMS ONNX',
-            isModelMesh: true,
-          }),
-        ],
-      });
-
-      cy.interceptK8sList(
-        { model: AcceleratorProfileModel, ns: 'test-project' },
-        mockK8sResourceList(mockProjectScopedAcceleratorProfiles),
-      ).as('acceleratorProfiles');
-
-      projectDetails.visitSection('test-project', 'model-server');
-      modelServingSection.findAddModelServerButton().click();
-      createServingRuntimeModal.shouldBeOpen();
-
-      // verify available project-scoped accelerator profile
-      acceleratorProfileSection.findAcceleratorProfileSearchSelector().should('exist');
-      acceleratorProfileSection.findAcceleratorProfileSearchSelector().click();
-
-      const projectScopedAcceleratorProfile =
-        acceleratorProfileSection.getProjectScopedAcceleratorProfile();
-      projectScopedAcceleratorProfile
-        .find()
-        .findByRole('menuitem', { name: 'Small Profile nvidia.com/gpu', hidden: true })
-        .click();
-      acceleratorProfileSection.findProjectScopedLabel().should('exist');
-
-      // verify available global-scoped hardware profile
-      acceleratorProfileSection.findAcceleratorProfileSearchSelector().click();
-      const globalScopedHardwareProfile =
-        acceleratorProfileSection.getGlobalScopedAcceleratorProfile();
-      globalScopedHardwareProfile
-        .find()
-        .findByRole('menuitem', {
-          name: 'NVIDIA GPU Lorem, ipsum dolor sit amet consectetur adipisicing elit. Saepe, quis nvidia.com/gpu',
-          hidden: true,
-        })
-        .click();
-      acceleratorProfileSection.findGlobalScopedLabel().should('exist');
-    });
-
-    it('should display accelerator profile selection when both accelerator profile and project-scoped feature flag is enabled for Model mesh, while editing model server', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-        disableAccelerator: false,
-        disableProjectScoped: false,
-        servingRuntimes: [
-          mockServingRuntimeK8sResource({
-            name: 'test-model',
-            namespace: 'test-project',
-            auth: true,
-            route: true,
-            acceleratorName: 'small-profile',
-          }),
-        ],
-      });
-
-      cy.interceptK8sList(
-        { model: AcceleratorProfileModel, ns: 'test-project' },
-        mockK8sResourceList(mockProjectScopedAcceleratorProfiles),
-      ).as('acceleratorProfiles');
-
-      projectDetails.visitSection('test-project', 'model-server');
-
-      // click on the toggle button and open edit model server
-      modelServingSection
-        .getModelMeshRow('OVMS Model Serving')
-        .find()
-        .findKebabAction('Edit model server')
-        .click();
-
-      editServingRuntimeModal.shouldBeOpen();
-      // cy.wait('@acceleratorProfile');
-      acceleratorProfileSection
-        .findAcceleratorProfileSearchSelector()
-        .should('contain.text', 'Small Profile');
-      acceleratorProfileSection.findProjectScopedLabel().should('exist');
-    });
-
-    it('Check project-scoped accelerator when enabled and selected', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-        disableAccelerator: false,
-        disableProjectScoped: false,
-        servingRuntimes: [
-          mockServingRuntimeK8sResource({
-            name: 'test-model',
-            namespace: 'test-project',
-            auth: true,
-            route: true,
-            acceleratorName: 'small-profile',
-          }),
-        ],
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-      modelServingSection.findModelServer().click();
-      modelServingSection
-        .findAcceleratorSection()
-        .should('have.text', 'AcceleratorSmall Profile Project-scoped');
-    });
-
-    it('should not display hardware profile section when project is model mesh enabled and hardware profile flag is enabled', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-        disableHardwareProfiles: false,
-        disableAccelerator: false,
-        disableProjectScoped: false,
-        servingRuntimes: [
-          mockServingRuntimeK8sResource({
-            hardwareProfileName: 'large-profile-1',
-            hardwareProfileNamespace: 'test-project',
-          }),
-        ],
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-      modelServingSection.findModelServer().click();
-      modelServingSection.findHardwareSection().should('not.exist');
-    });
-
-    it('should not display hardware profile selection when both hardware profile and project-scoped feature flag is enabled for Model mesh, while adding model server', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-        disableHardwareProfiles: false,
-        disableProjectScoped: false,
-        inferenceServices: [
-          mockInferenceServiceK8sResource({ name: 'test-inference', isModelMesh: true }),
-          mockInferenceServiceK8sResource({
-            name: 'another-inference-service',
-            displayName: 'Another Inference Service',
-            deleted: true,
-            isModelMesh: true,
-          }),
-          mockInferenceServiceK8sResource({
-            name: 'ovms-testing',
-            displayName: 'OVMS ONNX',
-            isModelMesh: true,
-          }),
-        ],
-      });
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findAddModelServerButton().click();
-
-      createServingRuntimeModal.shouldBeOpen();
-
-      // Verify hardware profile section is missing
-      hardwareProfileSection.findHardwareProfileSearchSelector().should('not.exist');
-      // replaced by the Model server size section
-      createServingRuntimeModal.findModelServerSizeSelect().should('exist');
-    });
-
-    it('should display hardware profile selection when both hardware profile and project-scoped feature flag is enabled for Model mesh, while editing model server', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-        disableHardwareProfiles: false,
-        disableProjectScoped: false,
-        servingRuntimes: [
-          mockServingRuntimeK8sResource({
-            hardwareProfileName: 'large-profile-1',
-            hardwareProfileNamespace: 'test-project',
-          }),
-        ],
-        inferenceServices: [
-          mockInferenceServiceK8sResource({ name: 'test-inference', isModelMesh: true }),
-          mockInferenceServiceK8sResource({
-            name: 'ovms-testing',
-            displayName: 'OVMS ONNX',
-            isModelMesh: true,
-          }),
-        ],
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-
-      // click on the toggle button and open edit model server
-      modelServingSection
-        .getModelMeshRow('OVMS Model Serving')
-        .find()
-        .findKebabAction('Edit model server')
-        .click();
-
-      editServingRuntimeModal.shouldBeOpen();
-
-      hardwareProfileSection.findHardwareProfileSearchSelector().should('not.exist');
-    });
-
-    it('Edit ModelMesh model server', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-        inferenceServices: [
-          mockInferenceServiceK8sResource({ name: 'test-inference', isModelMesh: true }),
-          mockInferenceServiceK8sResource({
-            name: 'ovms-testing',
-            displayName: 'OVMS ONNX',
-            isModelMesh: true,
-          }),
-        ],
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-
-      // click on the toggle button and open edit model server
-      modelServingSection
-        .getModelMeshRow('ovms')
-        .find()
-        .findKebabAction('Edit model server')
-        .click();
-
-      editServingRuntimeModal.shouldBeOpen();
-
-      // test name field
-      editServingRuntimeModal.findSubmitButton().should('be.disabled');
-      editServingRuntimeModal.k8sNameDescription.findDisplayNameInput().clear();
-      editServingRuntimeModal.k8sNameDescription.findDisplayNameInput().type('New name');
-      editServingRuntimeModal.findSubmitButton().should('be.enabled');
-      editServingRuntimeModal.k8sNameDescription.findDisplayNameInput().clear();
-      editServingRuntimeModal.k8sNameDescription.findDisplayNameInput().type('test-model-legacy');
-      editServingRuntimeModal.findSubmitButton().should('be.disabled');
-      // test replicas field
-      editServingRuntimeModal.findModelServerReplicasPlusButton().click();
-      editServingRuntimeModal.findSubmitButton().should('be.enabled');
-      editServingRuntimeModal.findModelServerReplicasMinusButton().click();
-      editServingRuntimeModal.findSubmitButton().should('be.disabled');
-      // test size field
-      editServingRuntimeModal
-        .findModelServerSizeSelect()
-        .findSelectOption(/Medium/)
-        .click();
-      editServingRuntimeModal.findSubmitButton().should('be.enabled');
-      editServingRuntimeModal.findModelServerSizeSelect().findSelectOption(/Small/).click();
-      editServingRuntimeModal.findSubmitButton().should('be.disabled');
-      // test external route field
-      editServingRuntimeModal.findModelRouteCheckbox().check();
-      editServingRuntimeModal.findSubmitButton().should('be.enabled');
-      editServingRuntimeModal.findModelRouteCheckbox().uncheck();
-      editServingRuntimeModal.findAuthenticationCheckbox().uncheck();
-      editServingRuntimeModal.findSubmitButton().should('be.disabled');
-      // test tokens field
-      editServingRuntimeModal.findAuthenticationCheckbox().check();
-      editServingRuntimeModal.findSubmitButton().should('be.enabled');
-
-      editServingRuntimeModal.findSubmitButton().click();
-
-      cy.wait('@editModelServer').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All'); //dry run request
-        expect(interception.request.body).to.containSubset({
-          metadata: {
-            labels: { name: 'test-model-legacy', 'opendatahub.io/dashboard': 'true' },
-            annotations: {
-              'enable-auth': 'true',
-              'opendatahub.io/accelerator-name': '',
-              'openshift.io/display-name': 'test-model-legacy',
-            },
-            name: 'test-model-legacy',
-            namespace: 'test-project',
-          },
-        });
-      });
-    });
-
-    it('Successfully add model server when user can edit namespace (only one serving platform enabled)', () => {
-      // If only one platform is enabled, project platform selection has not happened yet and patching the namespace with the platform happens at deploy time.
-      initIntercepts({
-        disableKServeConfig: true,
-        disableModelMeshConfig: false,
-        projectEnableModelMesh: true,
-      });
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findAddModelServerButton().click();
-      // modelServingGlobal.findSingleServingModelButton().click();
-
-      createServingRuntimeModal.shouldBeOpen();
-
-      // fill in minimum required fields
-      createServingRuntimeModal.k8sNameDescription.findDisplayNameInput().type('Test Name');
-      createServingRuntimeModal.findServingRuntimeTemplateSearchSelector().click();
-      createServingRuntimeModal.findGlobalScopedTemplateOption('New OVMS Server').click();
-      createServingRuntimeModal.findSubmitButton().should('be.enabled');
-
-      // test submitting form, the modal should close to indicate success.
-      createServingRuntimeModal.findSubmitButton().click();
-      createServingRuntimeModal.shouldBeOpen(false);
-
-      // dry run request
-      cy.wait('@createServingRuntime').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.containSubset({
-          metadata: {
-            name: 'test-name',
-            annotations: {
-              'openshift.io/display-name': 'Test Name',
-              'opendatahub.io/template-name': 'template-3',
-              'opendatahub.io/template-display-name': 'New OVMS Server',
-              'opendatahub.io/accelerator-name': '',
-              'opendatahub.io/apiProtocol': 'REST',
-            },
-            namespace: 'test-project',
-          },
-        });
-      });
-
-      // Actual request
-      cy.wait('@createServingRuntime').then((interception) => {
-        expect(interception.request.url).not.to.include('?dryRun=All');
-      });
-
-      // the serving runtime should have been created
-      cy.get('@createServingRuntime.all').then((interceptions) => {
-        expect(interceptions).to.have.length(2); // 1 dry-run request and 1 actual request
-      });
-    });
-
-    it('Do not add model server when user cannot edit namespace (only one serving platform enabled)', () => {
-      // If only one platform is enabled, project platform selection has not happened yet and patching the namespace with the platform happens at deploy time.
-      initIntercepts({
-        disableKServeConfig: true,
-        disableModelMeshConfig: false,
-        rejectAddSupportServingPlatformProject: true,
-      });
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findAddModelServerButton().click();
-
-      createServingRuntimeModal.shouldBeOpen();
-
-      // fill in minimum required fields
-      createServingRuntimeModal.k8sNameDescription.findDisplayNameInput().type('Test Name');
-      createServingRuntimeModal.findServingRuntimeTemplateSearchSelector().click();
-      createServingRuntimeModal.findGlobalScopedTemplateOption('New OVMS Server').click();
-      createServingRuntimeModal.findSubmitButton().should('be.enabled');
-
-      // test submitting form, an error should appear
-      createServingRuntimeModal.findSubmitButton().click();
-      cy.findByText('Error creating model server');
-
-      // dry run request
-      cy.wait('@createServingRuntime').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.containSubset({
-          metadata: {
-            name: 'test-name',
-            annotations: {
-              'openshift.io/display-name': 'Test Name',
-              'opendatahub.io/template-name': 'template-3',
-              'opendatahub.io/template-display-name': 'New OVMS Server',
-              'opendatahub.io/accelerator-name': '',
-              'opendatahub.io/apiProtocol': 'REST',
-            },
-            namespace: 'test-project',
-          },
-        });
-      });
-
-      // the serving runtime should NOT have been created
-      cy.get('@createServingRuntime.all').then((interceptions) => {
-        expect(interceptions).to.have.length(1); // 1 dry-run request only
-      });
-    });
-  });
-
-  describe('Model server with ServiceAccount and RoleBinding', () => {
-    it('Add model server - do not create ServiceAccount or RoleBinding if token auth is not selected', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-      });
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findAddModelServerButton().click();
-
-      createServingRuntimeModal.shouldBeOpen();
-
-      // fill in minimum required fields
-      createServingRuntimeModal.k8sNameDescription.findDisplayNameInput().type('Test Name');
-      createServingRuntimeModal.findServingRuntimeTemplateSearchSelector().click();
-      createServingRuntimeModal.findGlobalScopedTemplateOption('New OVMS Server').click();
-      createServingRuntimeModal.findSubmitButton().should('be.enabled');
-
-      // test submitting form, the modal should close to indicate success.
-      createServingRuntimeModal.findSubmitButton().click();
-      createServingRuntimeModal.shouldBeOpen(false);
-
-      // dry run request only
-      cy.wait('@createServingRuntime').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.containSubset({
-          metadata: {
-            name: 'test-name',
-            annotations: {
-              'openshift.io/display-name': 'Test Name',
-              'opendatahub.io/template-name': 'template-3',
-              'opendatahub.io/template-display-name': 'New OVMS Server',
-              'opendatahub.io/accelerator-name': '',
-              'opendatahub.io/apiProtocol': 'REST',
-            },
-            namespace: 'test-project',
-          },
-        });
-      });
-
-      //Actual request
-      cy.wait('@createServingRuntime').then((interception) => {
-        expect(interception.request.url).not.to.include('?dryRun=All');
-      });
-
-      cy.get('@createServingRuntime.all').then((interceptions) => {
-        expect(interceptions).to.have.length(2); // 1 dry run request and 1 actaul request
-      });
-
-      // the service account and role binding should not have been created
-      cy.get('@createServiceAccount.all').then((interceptions) => {
-        expect(interceptions).to.have.length(0);
-      });
-      cy.get('@createRoleBinding.all').then((interceptions) => {
-        expect(interceptions).to.have.length(0);
-      });
-      cy.get('@createRole.all').then((interceptions) => {
-        expect(interceptions).to.have.length(0);
-      });
-    });
-
-    it('Add model server - create ServiceAccount and RoleBinding if token auth is selected', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-      });
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findAddModelServerButton().click();
-
-      createServingRuntimeModal.shouldBeOpen();
-
-      // fill in minimum required fields
-      createServingRuntimeModal.k8sNameDescription.findDisplayNameInput().type('Test Name');
-      createServingRuntimeModal.findServingRuntimeTemplateSearchSelector().click();
-      createServingRuntimeModal.findGlobalScopedTemplateOption('New OVMS Server').click();
-      createServingRuntimeModal.findSubmitButton().should('be.enabled');
-
-      // enable auth
-      createServingRuntimeModal.findAuthenticationCheckbox().check();
-
-      // test submitting form, the modal should close to indicate success.
-      createServingRuntimeModal.findSubmitButton().click();
-      createServingRuntimeModal.shouldBeOpen(false);
-
-      //dry run request
-      cy.wait('@createServiceAccount').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.eql({
-          apiVersion: 'v1',
-          kind: 'ServiceAccount',
-          metadata: { name: 'test-name-sa', namespace: 'test-project', ownerReferences: [] },
-        });
-      });
-
-      // Actual request
-      cy.wait('@createServiceAccount').then((interception) => {
-        expect(interception.request.url).not.to.include('?dryRun=All');
-      });
-
-      // the service account and role binding should have been created
-      cy.get('@createServiceAccount.all').then((interceptions) => {
-        expect(interceptions).to.have.length(2); // 1 dry-run request and 1 actual request
-      });
-
-      // dry run request
-      cy.wait('@createRoleBinding').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All');
-        expect(interception.request.body).to.containSubset({
-          metadata: {
-            name: 'test-name-view',
-            namespace: 'test-project',
-            ownerReferences: [],
-          },
-          roleRef: { apiGroup: 'rbac.authorization.k8s.io', kind: 'ClusterRole', name: 'view' },
-          subjects: [{ kind: 'ServiceAccount', name: 'test-name-sa' }],
-        });
-      });
-
-      // Actual request
-      cy.wait('@createRoleBinding').then((interception) => {
-        expect(interception.request.url).not.to.include('?dryRun=All');
-      });
-
-      cy.get('@createRoleBinding.all').then((interceptions) => {
-        expect(interceptions).to.have.length(2); // 1 dry-run request and 1 actual request
-      });
-    });
-
-    it('Add model server - do not create ServiceAccount or RoleBinding if they already exist', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-        serviceAccountAlreadyExists: true,
-        roleBindingAlreadyExists: true,
-        roleAlreadyExists: true,
-      });
-      projectDetails.visitSection('test-project', 'model-server');
-
-      modelServingSection.findAddModelServerButton().click();
-
-      createServingRuntimeModal.shouldBeOpen();
-
-      // fill in minimum required fields
-      createServingRuntimeModal.k8sNameDescription.findDisplayNameInput().type('Test Name');
-      createServingRuntimeModal.findServingRuntimeTemplateSearchSelector().click();
-      createServingRuntimeModal.findGlobalScopedTemplateOption('New OVMS Server').click();
-      createServingRuntimeModal.findSubmitButton().should('be.enabled');
-
-      // enable auth
-      createServingRuntimeModal.findAuthenticationCheckbox().check();
-
-      // test submitting form, the modal should close to indicate success.
-      createServingRuntimeModal.findSubmitButton().click();
-      createServingRuntimeModal.shouldBeOpen(false);
-
-      //dry run request
-      cy.wait('@createServingRuntime').then((interception) => {
-        expect(interception.request.url).to.include('?dryRun=All'); //dry run request
-        expect(interception.request.body).to.containSubset({
-          metadata: {
-            name: 'test-name',
-            annotations: {
-              'enable-auth': 'true',
-              'openshift.io/display-name': 'Test Name',
-              'opendatahub.io/template-name': 'template-3',
-              'opendatahub.io/template-display-name': 'New OVMS Server',
-              'opendatahub.io/accelerator-name': '',
-              'opendatahub.io/apiProtocol': 'REST',
-            },
-            labels: { 'opendatahub.io/dashboard': 'true' },
-            namespace: 'test-project',
-          },
-        });
-      });
-
-      // Actual request
-      cy.wait('@createServingRuntime').then((interception) => {
-        expect(interception.request.url).not.to.include('?dryRun=All');
-      });
-
-      cy.get('@createServingRuntime.all').then((interceptions) => {
-        expect(interceptions).to.have.length(2);
-      });
-      // the service account and role binding should have been created
-      cy.get('@createServiceAccount.all').then((interceptions) => {
-        expect(interceptions).to.have.length(0);
-      });
-
-      cy.get('@createRoleBinding.all').then((interceptions) => {
-        expect(interceptions).to.have.length(0);
-      });
-      cy.get('@createRole.all').then((interceptions) => {
-        expect(interceptions).to.have.length(0);
-      });
-    });
-  });
-
   describe('Check accelerator section in serving runtime details', () => {
     it('Check accelerator when disabled', () => {
       initIntercepts({
@@ -3417,36 +1970,12 @@ describe('Serving Runtime List', () => {
       kserveRow.findToggleButton().click();
       kserveRow.findDescriptionListItem('Token authentication').should('not.exist');
     });
-
-    it('Check token section is always available for kserve raw', () => {
-      initIntercepts({
-        projectEnableModelMesh: false,
-        disableKServeConfig: false,
-        disableModelMeshConfig: true,
-        disableAccelerator: true,
-        disableKServeRaw: false,
-        inferenceServices: [
-          mockInferenceServiceK8sResource({
-            name: 'llama-caikit',
-            displayName: 'Llama Caikit',
-            url: 'http://llama-caikit.test-project.svc.cluster.local',
-            activeModelState: 'Loaded',
-            isKserveRaw: true,
-          }),
-        ],
-      });
-      projectDetails.visitSection('test-project', 'model-server');
-      const kserveRow = modelServingSection.getKServeRow('Llama Caikit');
-      kserveRow.findExpansion().should(be.collapsed);
-      kserveRow.findToggleButton().click();
-      kserveRow.findDescriptionListItem('Token authentication').should('exist');
-    });
   });
 
   describe('Dry run check', () => {
     it('Check when inference service dryRun fails', () => {
       initIntercepts({
-        disableModelMeshConfig: true,
+        //disableModelMeshConfig true,
         disableKServeConfig: false,
         servingRuntimes: [],
         rejectInferenceService: true,
@@ -3486,7 +2015,7 @@ describe('Serving Runtime List', () => {
 
     it('Check when serving runtime dryRun fails', () => {
       initIntercepts({
-        disableModelMeshConfig: true,
+        //disableModelMeshConfig true,
         disableKServeConfig: false,
         servingRuntimes: [],
         rejectServingRuntime: true,
@@ -3681,48 +2210,6 @@ describe('Serving Runtime List', () => {
   });
 
   describe('Internal service', () => {
-    it('Check internal service is rendered when the model is loaded in Modelmesh', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-        servingRuntimes: [
-          mockServingRuntimeK8sResource({
-            name: 'test-model',
-            auth: true,
-            route: false,
-          }),
-        ],
-        inferenceServices: [
-          mockInferenceServiceK8sResource({
-            name: 'model-loaded',
-            displayName: 'Loaded model',
-            isModelMesh: true,
-            statusPredictor: {
-              grpcUrl: 'grpc://modelmesh-serving.modelmesh:8033',
-              restUrl: 'http://modelmesh-serving.modelmesh:8008',
-              url: 'grpc://modelmesh-serving.modelmesh:8033',
-            },
-            activeModelState: 'Loaded',
-          }),
-        ],
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-
-      // Expand the model serving section
-      modelServingSection
-        .getModelMeshRow('OVMS Model Serving')
-        .findDeployedModelExpansionButton()
-        .click();
-      modelServingSection.findInferenceServiceTable().should('exist');
-
-      // Get modal of inference service when is loaded
-      const loadedInferenceServiceRow = modelServingSection.getInferenceServiceRow('Loaded model');
-      loadedInferenceServiceRow.findInternalServiceButton().click();
-      loadedInferenceServiceRow.findInternalServicePopover().findByText('grpcUrl').should('exist');
-    });
-
     it('Check internal service is rendered when the model is loaded in Kserve', () => {
       initIntercepts({
         projectEnableModelMesh: false,
@@ -3761,38 +2248,8 @@ describe('Serving Runtime List', () => {
       kserveRowModelLoaded.findInternalServicePopover().findByText('Internal').should('exist');
     });
   });
+
   describe('Serving Runtime Template Selection', () => {
-    it('displays label in search selector when multi-model serving is selected', () => {
-      initIntercepts({
-        projectEnableModelMesh: true,
-        disableKServeConfig: false,
-        disableModelMeshConfig: false,
-      });
-
-      projectDetails.visitSection('test-project', 'model-server');
-      modelServingSection.findAddModelServerButton().click();
-      createServingRuntimeModal.findServingRuntimeTemplateSearchSelector().should('exist');
-      createServingRuntimeModal.findServingRuntimeTemplateSearchSelector().click();
-      createServingRuntimeModal.findGlobalScopedTemplateOption('Multi Platform').within(() => {
-        createServingRuntimeModal.findServingRuntimeVersionLabel().should('exist');
-      });
-      createServingRuntimeModal.findGlobalScopedTemplateOption('Multi Platform').click();
-      createServingRuntimeModal.findServingRuntimeTemplateSearchSelector().within(() => {
-        createServingRuntimeModal.findServingRuntimeVersionLabel().should('exist');
-      });
-      createServingRuntimeModal.findCloseButton().click();
-
-      // Check that the label is displayed when editing
-      modelServingSection
-        .getModelMeshRow('OVMS Model Serving')
-        .find()
-        .findKebabAction('Edit model server')
-        .click();
-      editServingRuntimeModal.findServingRuntimeTemplateSearchSelector().within(() => {
-        editServingRuntimeModal.findServingRuntimeVersionLabel().should('exist');
-      });
-    });
-
     it('displays label in search selector when single-model serving is selected', () => {
       initIntercepts({
         projectEnableModelMesh: false,
@@ -3818,6 +2275,361 @@ describe('Serving Runtime List', () => {
       kserveModalEdit.findServingRuntimeTemplateSearchSelector().within(() => {
         kserveModalEdit.findServingRuntimeVersionLabel().should('exist');
       });
+    });
+  });
+
+  describe('kserve raw', () => {
+    it('Deploy KServe raw model (with serverless available)', () => {
+      initIntercepts({
+        //disableModelMeshConfig false,
+        disableKServeConfig: false,
+        disableServingRuntimeParams: false,
+        servingRuntimes: [],
+        requiredCapabilities: [StackCapability.SERVICE_MESH, StackCapability.SERVICE_MESH_AUTHZ],
+        projectEnableModelMesh: false,
+      });
+      cy.interceptOdh(
+        'GET /api/config',
+        mockDashboardConfig({
+          disableKServeRaw: false,
+        }),
+      );
+
+      projectDetails.visitSection('test-project', 'model-server');
+
+      modelServingSection.findDeployModelButton().click();
+
+      kserveModal.shouldBeOpen();
+
+      // test that you can not submit on empty
+      kserveModal.findSubmitButton().should('be.disabled');
+
+      // test filling in minimum required fields
+      kserveModal.findModelNameInput().type('Test Name');
+      kserveModal.findServingRuntimeTemplateSearchSelector().click();
+      kserveModal.findGlobalScopedTemplateOption('Caikit').click();
+      kserveModal.findModelFrameworkSelect().findSelectOption('onnx - 1').click();
+      kserveModal.findSubmitButton().should('be.disabled');
+      // misc.
+      kserveModal.findModelRouteCheckbox().check();
+      kserveModal.findAuthenticationCheckbox().check();
+      kserveModal.findExternalRouteError().should('not.exist');
+      kserveModal.findServiceAccountNameInput().should('have.value', 'default-name');
+      kserveModal.findExistingConnectionOption().click();
+      kserveModal.findExistingConnectionSelect().should('have.attr', 'disabled');
+      kserveModal
+        .findExistingConnectionSelect()
+        .findByRole('combobox')
+        .should('have.value', 'Test Secret');
+      kserveModal.findLocationPathInput().type('test-model/');
+      kserveModal.findSubmitButton().should('be.enabled');
+      // raw
+      kserveModal.findDeploymentModeSelect().should('contain.text', 'Knative Serverless');
+
+      // Test Knative Serverless mode replica settings
+      kserveModal.findMinReplicasInput().should('have.value', '1');
+      kserveModal.findMinReplicasPlusButton().should('be.disabled');
+      kserveModal.findMaxReplicasInput().should('have.value', '1');
+      kserveModal.findMaxReplicasMinusButton().should('be.disabled');
+      kserveModal.findMaxReplicasPlusButton().click();
+      kserveModal.findMaxReplicasInput().should('have.value', '2');
+      kserveModal.findMinReplicasPlusButton().click();
+      kserveModal.findMinReplicasInput().should('have.value', '2');
+
+      // Test max replicas error message
+      kserveModal.findMaxReplicasInput().clear().type('1');
+      kserveModal.findMaxReplicasErrorMessage().should('exist');
+      kserveModal.findMaxReplicasInput().type('6');
+      kserveModal.findMaxReplicasErrorMessage().should('not.exist');
+
+      // Test min replicas error message
+      kserveModal.findMaxReplicasInput().clear().type('6');
+      kserveModal.findMinReplicasInput().clear().type('8');
+      kserveModal.findMinReplicasErrorMessage().should('exist');
+      kserveModal.findSubmitButton().should('be.disabled');
+      kserveModal.findMinReplicasInput().clear().type('4');
+      kserveModal.findMinReplicasErrorMessage().should('not.exist');
+      kserveModal.findSubmitButton().should('be.enabled');
+
+      // Test max limit of 99
+      kserveModal.findMaxReplicasInput().clear().type('100');
+      kserveModal.findMaxReplicasInput().should('have.value', '99');
+      kserveModal.findMaxReplicasPlusButton().should('be.disabled');
+      kserveModal.findDeploymentModeSelect().findSelectOption('KServe RawDeployment').click();
+
+      // test submitting form, the modal should close to indicate success.
+      kserveModal.findSubmitButton().click();
+      kserveModal.shouldBeOpen(false);
+
+      // dry run request
+      cy.wait('@createServingRuntime').then((interception) => {
+        expect(interception.request.url).to.include('?dryRun=All');
+        expect(interception.request.body).to.containSubset({
+          metadata: {
+            name: 'test-name',
+            annotations: {
+              'openshift.io/display-name': 'test-name',
+              'opendatahub.io/apiProtocol': 'REST',
+              'opendatahub.io/template-name': 'template-2',
+              'opendatahub.io/template-display-name': 'Caikit',
+              'opendatahub.io/accelerator-name': '',
+            },
+            namespace: 'test-project',
+          },
+          spec: {
+            protocolVersions: ['grpc-v1'],
+            supportedModelFormats: [
+              { autoSelect: true, name: 'openvino_ir', version: 'opset1' },
+              { autoSelect: true, name: 'onnx', version: '1' },
+            ],
+          },
+        });
+      });
+
+      // Actual request
+      cy.wait('@createServingRuntime').then((interception) => {
+        expect(interception.request.url).not.to.include('?dryRun=All');
+      });
+
+      // the serving runtime should have been created
+      cy.get('@createServingRuntime.all').then((interceptions) => {
+        expect(interceptions).to.have.length(2); // 1 dry-run request and 1 actual request
+      });
+
+      cy.wait('@createInferenceService').then((interception) => {
+        expect(interception.request.url).to.include('?dryRun=All');
+        expect(interception.request.body).to.containSubset({
+          apiVersion: 'serving.kserve.io/v1beta1',
+          kind: 'InferenceService',
+          metadata: {
+            name: 'test-name',
+            namespace: 'test-project',
+            annotations: {
+              'openshift.io/display-name': 'Test Name',
+              'serving.kserve.io/deploymentMode': DeploymentMode.RawDeployment,
+              'security.opendatahub.io/enable-auth': 'true',
+            },
+            labels: {
+              'opendatahub.io/dashboard': 'true',
+              'networking.kserve.io/visibility': 'exposed',
+            },
+          },
+          spec: {
+            predictor: {
+              minReplicas: 4,
+              maxReplicas: 4,
+              model: {
+                modelFormat: { name: 'onnx', version: '1' },
+                runtime: 'test-name',
+                storage: { key: 'test-secret', path: 'test-model/' },
+                resources: {
+                  requests: { cpu: '1', memory: '4Gi' },
+                  limits: { cpu: '2', memory: '8Gi' },
+                },
+              },
+            },
+          },
+        });
+      });
+
+      //dry run request
+      cy.wait('@createRole').then((interception) => {
+        expect(interception.request.url).to.include('?dryRun=All');
+        expect(interception.request.body).to.containSubset({
+          metadata: {
+            name: 'test-name-view-role',
+            namespace: 'test-project',
+            ownerReferences: [],
+          },
+          rules: [
+            {
+              verbs: ['get'],
+              apiGroups: ['serving.kserve.io'],
+              resources: ['inferenceservices'],
+              resourceNames: ['test-name'],
+            },
+          ],
+        });
+      });
+
+      //Actual request
+      cy.wait('@createRole').then((interception) => {
+        expect(interception.request.url).not.to.include('?dryRun=All');
+      });
+
+      cy.get('@createRole.all').then((interceptions) => {
+        expect(interceptions).to.have.length(2); //1 dry run request and 1 actual request
+      });
+    });
+
+    it('Deploy KServe raw model (with serverless disabled)', () => {
+      initIntercepts({
+        //disableModelMeshConfig false,
+        disableKServeConfig: false,
+        disableServingRuntimeParams: false,
+        disableKServeRaw: false,
+        servingRuntimes: [],
+        requiredCapabilities: [],
+        projectEnableModelMesh: false,
+        DscComponents: { kserve: { serverlessMode: 'Removed' } },
+      });
+
+      projectDetails.visitSection('test-project', 'model-server');
+
+      modelServingSection.findDeployModelButton().click();
+
+      kserveModal.shouldBeOpen();
+
+      // test that you can not submit on empty
+      kserveModal.findSubmitButton().should('be.disabled');
+
+      // test filling in minimum required fields
+      kserveModal.findModelNameInput().type('Test Name');
+      kserveModal.findServingRuntimeTemplateSearchSelector().click();
+      kserveModal.findGlobalScopedTemplateOption('Caikit').click();
+      kserveModal.findModelFrameworkSelect().findSelectOption('onnx - 1').click();
+      kserveModal.findSubmitButton().should('be.disabled');
+      // misc.
+      kserveModal.findModelRouteCheckbox().check();
+      kserveModal.findAuthenticationCheckbox().check();
+      kserveModal.findExternalRouteError().should('not.exist');
+      kserveModal.findServiceAccountNameInput().should('have.value', 'default-name');
+      kserveModal.findExistingConnectionOption().click();
+      kserveModal.findExistingConnectionSelect().should('have.attr', 'disabled');
+      kserveModal
+        .findExistingConnectionSelect()
+        .findByRole('combobox')
+        .should('have.value', 'Test Secret');
+      kserveModal.findLocationPathInput().type('test-model/');
+      kserveModal.findSubmitButton().should('be.enabled');
+      // raw
+
+      // test submitting form, the modal should close to indicate success.
+      kserveModal.findSubmitButton().click();
+      kserveModal.shouldBeOpen(false);
+
+      // dry run request
+      cy.wait('@createServingRuntime').then((interception) => {
+        expect(interception.request.url).to.include('?dryRun=All');
+        expect(interception.request.body).to.containSubset({
+          metadata: {
+            name: 'test-name',
+            annotations: {
+              'openshift.io/display-name': 'test-name',
+              'opendatahub.io/apiProtocol': 'REST',
+              'opendatahub.io/template-name': 'template-2',
+              'opendatahub.io/template-display-name': 'Caikit',
+              'opendatahub.io/accelerator-name': '',
+            },
+            namespace: 'test-project',
+          },
+          spec: {
+            protocolVersions: ['grpc-v1'],
+            supportedModelFormats: [
+              { autoSelect: true, name: 'openvino_ir', version: 'opset1' },
+              { autoSelect: true, name: 'onnx', version: '1' },
+            ],
+          },
+        });
+      });
+
+      // Actual request
+      cy.wait('@createServingRuntime').then((interception) => {
+        expect(interception.request.url).not.to.include('?dryRun=All');
+      });
+
+      // the serving runtime should have been created
+      cy.get('@createServingRuntime.all').then((interceptions) => {
+        expect(interceptions).to.have.length(2); // 1 dry-run request and 1 actual request
+      });
+
+      cy.wait('@createInferenceService').then((interception) => {
+        expect(interception.request.url).to.include('?dryRun=All');
+        expect(interception.request.body).to.containSubset({
+          apiVersion: 'serving.kserve.io/v1beta1',
+          kind: 'InferenceService',
+          metadata: {
+            name: 'test-name',
+            namespace: 'test-project',
+            annotations: {
+              'openshift.io/display-name': 'Test Name',
+              'serving.kserve.io/deploymentMode': DeploymentMode.RawDeployment,
+              'security.opendatahub.io/enable-auth': 'true',
+            },
+            labels: {
+              'opendatahub.io/dashboard': 'true',
+              'networking.kserve.io/visibility': 'exposed',
+            },
+          },
+          spec: {
+            predictor: {
+              minReplicas: 1,
+              maxReplicas: 1,
+              model: {
+                modelFormat: { name: 'onnx', version: '1' },
+                runtime: 'test-name',
+                storage: { key: 'test-secret', path: 'test-model/' },
+                resources: {
+                  requests: { cpu: '1', memory: '4Gi' },
+                  limits: { cpu: '2', memory: '8Gi' },
+                },
+              },
+            },
+          },
+        });
+      });
+
+      //dry run request
+      cy.wait('@createRole').then((interception) => {
+        expect(interception.request.url).to.include('?dryRun=All');
+        expect(interception.request.body).to.containSubset({
+          metadata: {
+            name: 'test-name-view-role',
+            namespace: 'test-project',
+            ownerReferences: [],
+          },
+          rules: [
+            {
+              verbs: ['get'],
+              apiGroups: ['serving.kserve.io'],
+              resources: ['inferenceservices'],
+              resourceNames: ['test-name'],
+            },
+          ],
+        });
+      });
+
+      //Actual request
+      cy.wait('@createRole').then((interception) => {
+        expect(interception.request.url).not.to.include('?dryRun=All');
+      });
+
+      cy.get('@createRole.all').then((interceptions) => {
+        expect(interceptions).to.have.length(2); //1 dry run request and 1 actual request
+      });
+    });
+    it('Check token section is always available for kserve raw', () => {
+      initIntercepts({
+        projectEnableModelMesh: false,
+        disableKServeConfig: false,
+        disableModelMeshConfig: true,
+        disableAccelerator: true,
+        disableKServeRaw: false,
+        inferenceServices: [
+          mockInferenceServiceK8sResource({
+            name: 'llama-caikit',
+            displayName: 'Llama Caikit',
+            url: 'http://llama-caikit.test-project.svc.cluster.local',
+            activeModelState: 'Loaded',
+            isKserveRaw: true,
+          }),
+        ],
+      });
+      projectDetails.visitSection('test-project', 'model-server');
+      const kserveRow = modelServingSection.getKServeRow('Llama Caikit');
+      kserveRow.findExpansion().should(be.collapsed);
+      kserveRow.findToggleButton().click();
+      kserveRow.findDescriptionListItem('Token authentication').should('exist');
     });
   });
 });
