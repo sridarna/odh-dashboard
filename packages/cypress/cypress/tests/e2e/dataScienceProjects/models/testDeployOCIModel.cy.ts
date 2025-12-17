@@ -137,7 +137,6 @@ describe(
         cy.step('Verify that the Model is running');
         // Verify model deployment is ready
         checkInferenceServiceState(modelDeploymentName, projectName, { checkReady: true });
-        cy.reload();
         modelServingSection.findModelMetricsLink(modelDeploymentName);
       },
     );

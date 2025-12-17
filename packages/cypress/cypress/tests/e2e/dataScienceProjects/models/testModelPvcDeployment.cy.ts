@@ -151,7 +151,6 @@ describe('[Product Bug: RHOAIENG-41827] Verify a model can be deployed from a PV
       cy.step('Verify that the Model is running');
       // Verify model deployment is ready
       checkInferenceServiceState(testData.singleModelName, projectName, { checkReady: true });
-      cy.reload();
     },
   );
 });

@@ -104,7 +104,6 @@ describe('Verify Model Creation and Validation using the UI', () => {
       cy.step('Verify that the Model is created Successfully on the backend and frontend');
       // Verify model deployment is ready
       checkInferenceServiceState(testData.singleModelName, projectName, { checkReady: true });
-      cy.reload();
       modelServingSection.findModelMetricsLink(testData.singleModelName);
       // Note reload is required as status tooltip was not found due to a stale element
       attemptToClickTooltip();

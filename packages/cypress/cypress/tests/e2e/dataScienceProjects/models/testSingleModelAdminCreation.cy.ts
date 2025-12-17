@@ -108,7 +108,6 @@ describe('Verify Admin Single Model Creation and Validation using the UI', () =>
       // Verify model deployment is ready
       checkInferenceServiceState(testData.singleModelAdminName, projectName, { checkReady: true });
       // Note reload is required as status tooltip was not found due to a stale element
-      cy.reload();
       modelServingSection.findModelMetricsLink(testData.singleModelAdminName);
       attemptToClickTooltip();
 
