@@ -213,8 +213,7 @@ function findActions() {
 Tests are parameterized using tags and applied to the 'it' block:
 
 * `Smoke`: P1/2 Critical Priority Test Cases
-* `Sanity`: P3 Normal Priority Test Cases
-* `Tier1`: P4 Low Priority Test Cases
+* `Tier`: P3 Normal Priority Test Cases
 * `ODS-1234`: Test Case ID (if applicable)
 * `Dashboard/NIM etc.`: High-Level Team
 * `Workbenches/Pipelines etc.`: Functional Area
@@ -225,7 +224,7 @@ Tests are parameterized using tags and applied to the 'it' block:
 
 **Usage in tests:**
 ```javascript
-it('test name', { tags: ['@Sanity', '@SanitySet1', '@ODS-1931', '@Dashboard', '@Workbenches'] }, () => {})
+it('test name', { tags: ['@Tier', '@Tier1', '@ODS-1931', '@Dashboard', '@Workbenches'] }, () => {})
 ```
 
 ### Test Contents
