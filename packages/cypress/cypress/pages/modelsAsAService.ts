@@ -445,6 +445,10 @@ class APIKeysPage {
   findUsernameFilterTooltip(): Cypress.Chainable<JQuery<HTMLElement>> {
     return cy.findByTestId('username-filter-tooltip');
   }
+
+  findRevokeActionsButton(rowName: string): Cypress.Chainable<JQuery<HTMLElement>> {
+    return this.getRow(rowName).findKebabAction('Revoke');
+  }
 }
 
 class APIKeyTableRow extends TableRow {
@@ -649,6 +653,10 @@ class CopyApiKeyModal extends Modal {
   findApiKeyExpirationDate(): Cypress.Chainable<JQuery<HTMLElement>> {
     return this.find().findByTestId('api-key-display-expiration');
   }
+
+  findCloseButton(): Cypress.Chainable<JQuery<HTMLElement>> {
+    return cy.findByTestId('close-api-key-button');
+  }
 }
 
 class AdminBulkRevokeAPIKeyModal extends Modal {
@@ -689,6 +697,12 @@ class SubscriptionsPage {
   visit(): void {
     cy.visitWithLogin('/maas/subscriptions');
     this.wait();
+  }
+
+  reload(): void {
+    cy.reload();
+    this.wait();
+    this.findTable().should('exist');
   }
 
   private wait(): void {
@@ -736,6 +750,18 @@ class SubscriptionsPage {
 
   findEmptyState(): Cypress.Chainable<JQuery<HTMLElement>> {
     return cy.findByTestId('empty-state-title');
+  }
+
+  findViewDetailsButton(rowName: string): Cypress.Chainable<JQuery<HTMLElement>> {
+    return this.getRow(rowName).findKebabAction('View details');
+  }
+
+  findEditButton(rowName: string): Cypress.Chainable<JQuery<HTMLElement>> {
+    return this.getRow(rowName).findKebabAction('Edit');
+  }
+
+  findDeleteButton(rowName: string): Cypress.Chainable<JQuery<HTMLElement>> {
+    return this.getRow(rowName).findKebabAction('Delete');
   }
 }
 
@@ -835,6 +861,12 @@ class CreateSubscriptionPage {
     this.findGroupsSelect().click();
   }
 
+  selectCustomGroup(name: string): void {
+    this.findGroupsSelect().find('input').type(name);
+    cy.findByTestId(`select-multi-typeahead-${name}`).click();
+    this.findGroupsSelect().click();
+  }
+
   findAddModelsButton(): Cypress.Chainable<JQuery<HTMLElement>> {
     return cy.findByTestId('add-models-button');
   }
@@ -853,6 +885,10 @@ class CreateSubscriptionPage {
 
   findCancelButton(): Cypress.Chainable<JQuery<HTMLElement>> {
     return cy.findByTestId('cancel-subscription-button');
+  }
+
+  addTokenRateLimit(index: number): void {
+    this.findModelsTable().findByTestId(`add-token-limit-${index}`).click();
   }
 }
 
@@ -903,6 +939,12 @@ class EditSubscriptionPage {
 
   findPolicyChangeWarning(): Cypress.Chainable<JQuery<HTMLElement>> {
     return cy.findByTestId('policy-change-warning');
+  }
+
+  typeCustomGroup(name: string): void {
+    this.findGroupsSelect().find('input').type(name);
+    cy.findByRole('option', { name: `Add group "${name}"` }).click();
+    this.findGroupsSelect().click();
   }
 
   findSaveButton(): Cypress.Chainable<JQuery<HTMLElement>> {
