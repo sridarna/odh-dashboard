@@ -37,6 +37,16 @@ export const isRunRetryable = (state: string | undefined): boolean => {
 };
 
 /**
+ * Whether the run is in a terminal state where it can be deleted.
+ */
+export const isRunDeletable = (state: string | undefined): boolean => {
+  const s = state?.toUpperCase();
+  return (
+    s === RuntimeStateKF.SUCCEEDED || s === RuntimeStateKF.FAILED || s === RuntimeStateKF.CANCELED
+  );
+};
+
+/**
  * Extracts HTTP status from Error.message when handleRestFailures (mod-arch-core)
  * has flattened AxiosError to a plain Error, so 403/404/503 branches can still run.
  * @param error - The error object to parse
@@ -90,20 +100,22 @@ export const isTabularRun = (pipelineRun?: PipelineRun): boolean => {
 /* eslint-disable camelcase */
 const METRIC_DISPLAY_NAMES: Record<string, string> = {
   f1: 'F₁',
-  mae: 'MAE',
-  mape: 'MAPE',
-  mase: 'MASE',
+  mean_absolute_error: 'MAE',
+  mean_absolute_percentage_error: 'MAPE',
+  mean_absolute_scaled_error: 'MASE',
+  mean_squared_error: 'MSE',
+  median_absolute_error: 'MedAE',
   mcc: 'MCC',
-  mse: 'MSE',
+  pearsonr: 'Pearson r',
   r2: 'R²',
-  rmse: 'RMSE',
-  rmsle: 'RMSLE',
-  rmsse: 'RMSSE',
   roc_auc: 'ROC AUC',
-  smape: 'SMAPE',
-  sql: 'SQL',
-  wape: 'WAPE',
-  wql: 'WQL',
+  root_mean_squared_error: 'RMSE',
+  root_mean_squared_logarithmic_error: 'RMSLE',
+  root_mean_squared_scaled_error: 'RMSSE',
+  scaled_quantile_loss: 'SQL',
+  symmetric_mean_absolute_percentage_error: 'SMAPE',
+  weighted_absolute_percentage_error: 'WAPE',
+  weighted_quantile_loss: 'WQL',
 };
 /* eslint-enable camelcase */
 
@@ -162,7 +174,7 @@ export function getOptimizedMetricForTask(taskType: string): string {
     case TASK_TYPE_REGRESSION:
       return 'r2';
     case TASK_TYPE_TIMESERIES:
-      return 'mase';
+      return 'mean_absolute_scaled_error';
     default:
       return 'Unknown metric';
   }
