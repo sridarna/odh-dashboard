@@ -129,7 +129,7 @@ describe('Verify Gen AI Namespace - Creation and Connection', () => {
   it(
     'Create custom serving runtime for Gen AI',
     {
-      tags: ['@Tier', '@Tier1', '@GenAI', '@ServingRuntime', '@NonConcurrent'],
+      tags: ['@Tier1', '@Tier1Set1', '@GenAI', '@ServingRuntime', '@NonConcurrent'],
     },
     () => {
       if (skipTest) {
@@ -178,7 +178,7 @@ describe('Verify Gen AI Namespace - Creation and Connection', () => {
   it(
     'Deploy Gen AI model using URI',
     {
-      tags: ['@Tier', '@Tier1', '@GenAI', '@ModelServing', '@Deployment', '@NonConcurrent'],
+      tags: ['@Tier1', '@Tier1Set1', '@GenAI', '@ModelServing', '@Deployment', '@NonConcurrent'],
     },
     () => {
       if (skipTest) {
@@ -260,7 +260,7 @@ describe('Verify Gen AI Namespace - Creation and Connection', () => {
   it(
     'Create and verify Gen AI Playground functionality',
     {
-      tags: ['@Tier', '@Tier1', '@GenAI', '@Playground', '@NonConcurrent'],
+      tags: ['@Tier1', '@Tier1Set1', '@GenAI', '@Playground', '@NonConcurrent'],
     },
     () => {
       if (skipTest) {
