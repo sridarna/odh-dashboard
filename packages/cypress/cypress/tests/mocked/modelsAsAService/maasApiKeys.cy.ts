@@ -404,7 +404,7 @@ describe('API Keys Page', () => {
     cy.wait('@emptySearch');
 
     apiKeysPage.findActionsToggle().click();
-    apiKeysPage.findRevokeAllAPIKeysAction().should('be.disabled');
+    apiKeysPage.findRevokeAllAPIKeysActionButton().should('be.disabled');
   });
 
   it('should revoke a specific API key', () => {

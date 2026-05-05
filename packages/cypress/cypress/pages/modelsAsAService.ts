@@ -402,6 +402,10 @@ class APIKeysPage {
     return cy.findByTestId('revoke-all-api-keys-action');
   }
 
+  findRevokeAllAPIKeysActionButton(): Cypress.Chainable<JQuery<HTMLElement>> {
+    return this.findRevokeAllAPIKeysAction().findByRole('menuitem');
+  }
+
   findEmptyTableState(): Cypress.Chainable<JQuery<HTMLElement>> {
     return cy.findByTestId('dashboard-empty-table-state');
   }
