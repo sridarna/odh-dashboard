@@ -397,6 +397,16 @@ describe('API Keys Page', () => {
     });
   });
 
+  it('should disable revoke all my API keys button when no active keys are present', () => {
+    cy.interceptOdh('GET /maas/api/v1/is-maas-admin', { data: { allowed: false } });
+    cy.interceptOdh('POST /maas/api/v1/api-keys/search', mockSearchResponse([])).as('emptySearch');
+    apiKeysPage.visit();
+    cy.wait('@emptySearch');
+
+    apiKeysPage.findActionsToggle().click();
+    apiKeysPage.findRevokeAllAPIKeysActionButton().should('be.disabled');
+  });
+
   it('should revoke a specific API key', () => {
     apiKeysPage.findTitle().should('contain.text', 'API keys');
     apiKeysPage.getRow('development-testing').findKebabAction('Revoke').click();
