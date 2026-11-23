@@ -3,6 +3,13 @@ import { z } from 'zod';
 import { removeManagedFields } from './removeManagedFields';
 import { DeploymentAssemblyResources } from '../../../../extension-points/deployment-wizard';
 
+export type YamlKindReference = {
+  apiVersion: string;
+  group: string;
+  version: string;
+  kind: string;
+};
+
 // The wizard requires named, namespaced resources. Extensions validate kind-specific fields.
 const kubernetesResourceSchema = z
   .object({
@@ -70,5 +77,38 @@ export const convertYamlToResources = (yaml?: string): ResourcesParseResult => {
       resources: { model: undefined },
       error: error instanceof Error ? error : new Error('Failed to parse YAML'),
     };
+  }
+};
+
+export const getKindReferenceFromYaml = (yaml?: string): YamlKindReference | null => {
+  try {
+    if (!yaml?.trim()) {
+      return null;
+    }
+
+    const parsed = parse(yaml);
+    const result = kubernetesResourceSchema
+      .pick({ apiVersion: true, kind: true })
+      .safeParse(parsed);
+
+    if (!result.success) {
+      return null;
+    }
+
+    const { apiVersion, kind } = result.data;
+    const [group, version] = apiVersion.includes('/') ? apiVersion.split('/', 2) : ['', apiVersion];
+
+    if (!version) {
+      return null;
+    }
+
+    return {
+      apiVersion,
+      group,
+      version,
+      kind,
+    };
+  } catch {
+    return null;
   }
 };

@@ -86,16 +86,19 @@ export const useModelDeploymentSubmit = (
         if (!isExternalDataReady(externalData)) {
           throw new Error('Required data is still loading');
         }
+        if (!resources.model) {
+          throw new Error('Deployment resources are not ready');
+        }
         if (viewMode === 'yaml-edit' && yamlErrors && yamlErrors.length > 0) {
           throw yamlErrors[0];
         }
         if (
           viewMode === 'yaml-edit' &&
-          (resources.model?.kind !== 'LLMInferenceService' ||
+          (resources.model.kind !== 'LLMInferenceService' ||
             resources.model.apiVersion !== 'serving.kserve.io/v1alpha2')
         ) {
           throw new Error(
-            'Invalid YAML: Kind must be LLMInferenceService and apiVersion must be serving.kserve.io/v1alpha2',
+            'Invalid YAML: kind must be LLMInferenceService and apiVersion must be serving.kserve.io/v1alpha2',
           );
         }
         if (!isReady) {

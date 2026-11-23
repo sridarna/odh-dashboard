@@ -1,5 +1,5 @@
 import { stringify } from 'yaml';
-import { convertYamlToResources } from '../yamlUtils';
+import { convertYamlToResources, getKindReferenceFromYaml } from '../yamlUtils';
 
 const resource = {
   apiVersion: 'v1',
@@ -110,6 +110,41 @@ describe('convertYamlToResources', () => {
       const result = convertYamlToResources(yaml);
       expect(result.resources.model).toBeUndefined();
       expect(result.error).toBeInstanceOf(Error);
+    },
+  );
+});
+
+describe('getKindReferenceFromYaml', () => {
+  it('should derive group, version, apiVersion, and kind from grouped resources', () => {
+    expect(
+      getKindReferenceFromYaml(
+        stringify({
+          ...resource,
+          apiVersion: 'serving.kserve.io/v1beta1',
+          kind: 'InferenceService',
+        }),
+      ),
+    ).toEqual({
+      apiVersion: 'serving.kserve.io/v1beta1',
+      group: 'serving.kserve.io',
+      version: 'v1beta1',
+      kind: 'InferenceService',
+    });
+  });
+
+  it('should derive core group kinds with an empty group', () => {
+    expect(getKindReferenceFromYaml(stringify(resource))).toEqual({
+      apiVersion: 'v1',
+      group: '',
+      version: 'v1',
+      kind: 'ConfigMap',
+    });
+  });
+
+  it.each([undefined, '', 'kind: MissingApiVersion', 'invalid: yaml:'])(
+    'should return null when the YAML cannot produce a valid kind reference: %j',
+    (yaml) => {
+      expect(getKindReferenceFromYaml(yaml)).toBeNull();
     },
   );
 });

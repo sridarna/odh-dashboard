@@ -1,5 +1,6 @@
 import { configureMonacoYaml } from 'monaco-yaml';
 import {
+  buildDeploymentWizardYamlSchemas,
   configureDeploymentWizardMonacoYaml,
   DEPLOYMENT_WIZARD_YAML_MODEL_URI,
 } from '../configureDeploymentWizardMonacoYaml';
@@ -43,8 +44,8 @@ describe('configureDeploymentWizardMonacoYaml', () => {
     expect(mockConfigureMonacoYaml).toHaveBeenCalledTimes(1);
     expect(mockConfigureMonacoYaml).toHaveBeenCalledWith(monaco, {
       enableSchemaRequest: false,
-      hover: false,
-      completion: false,
+      hover: true,
+      completion: true,
       validate: true,
       schemas: [],
     });
@@ -87,5 +88,182 @@ describe('configureDeploymentWizardMonacoYaml', () => {
       editorMonaco,
       expect.objectContaining({ validate: true }),
     );
+  });
+
+  it('should build a file-matched schema registration for the active kind', () => {
+    expect(
+      buildDeploymentWizardYamlSchemas({ type: 'object', description: 'Example schema' }),
+    ).toEqual([
+      {
+        uri: 'file:///deployment-wizard-schema.json',
+        fileMatch: [DEPLOYMENT_WIZARD_YAML_MODEL_URI],
+        schema: { type: 'object', description: 'Example schema' },
+      },
+    ]);
+  });
+
+  it('should preserve referenced component schemas for nested yaml validation', () => {
+    expect(
+      buildDeploymentWizardYamlSchemas({
+        $ref: '#/components/schemas/io.k8s.example.v1.ExampleKind',
+        components: {
+          schemas: {
+            'io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta': { type: 'object' },
+            'io.k8s.example.v1.ExampleKind': {
+              type: 'object',
+              properties: {
+                metadata: {
+                  $ref: '#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta',
+                },
+              },
+            },
+          },
+        },
+      }),
+    ).toEqual([
+      {
+        uri: 'file:///deployment-wizard-schema.json',
+        fileMatch: [DEPLOYMENT_WIZARD_YAML_MODEL_URI],
+        schema: {
+          type: 'object',
+          properties: {
+            metadata: {
+              $ref: '#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta',
+            },
+          },
+          components: {
+            schemas: {
+              'io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta': { type: 'object' },
+              'io.k8s.example.v1.ExampleKind': {
+                type: 'object',
+                properties: {
+                  metadata: {
+                    $ref: '#/components/schemas/io.k8s.apimachinery.pkg.apis.meta.v1.ObjectMeta',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    ]);
+  });
+
+  it('should normalize openapi local refs so monaco can resolve component schemas', () => {
+    expect(
+      buildDeploymentWizardYamlSchemas({
+        $ref: '/components/schemas/io.kserve.serving.v1beta1.InferenceService',
+        components: {
+          schemas: {
+            'io.kserve.serving.v1beta1.InferenceService': {
+              type: 'object',
+              properties: {
+                spec: {
+                  $ref: '/components/schemas/io.kserve.serving.v1beta1.InferenceServiceSpec',
+                },
+              },
+            },
+            'io.kserve.serving.v1beta1.InferenceServiceSpec': {
+              type: 'object',
+              properties: {
+                predictor: {
+                  $ref: '/components/schemas/io.kserve.serving.v1beta1.PredictorSpec',
+                },
+              },
+            },
+            'io.kserve.serving.v1beta1.PredictorSpec': { type: 'object' },
+          },
+        },
+      }),
+    ).toEqual([
+      {
+        uri: 'file:///deployment-wizard-schema.json',
+        fileMatch: [DEPLOYMENT_WIZARD_YAML_MODEL_URI],
+        schema: {
+          type: 'object',
+          properties: {
+            spec: {
+              $ref: '#/components/schemas/io.kserve.serving.v1beta1.InferenceServiceSpec',
+            },
+          },
+          components: {
+            schemas: {
+              'io.kserve.serving.v1beta1.InferenceService': {
+                type: 'object',
+                properties: {
+                  spec: {
+                    $ref: '#/components/schemas/io.kserve.serving.v1beta1.InferenceServiceSpec',
+                  },
+                },
+              },
+              'io.kserve.serving.v1beta1.InferenceServiceSpec': {
+                type: 'object',
+                properties: {
+                  predictor: {
+                    $ref: '#/components/schemas/io.kserve.serving.v1beta1.PredictorSpec',
+                  },
+                },
+              },
+              'io.kserve.serving.v1beta1.PredictorSpec': { type: 'object' },
+            },
+          },
+        },
+      },
+    ]);
+  });
+
+  it('should inline the root schema for llm inference services so monaco does not resolve a root component ref', () => {
+    expect(
+      buildDeploymentWizardYamlSchemas({
+        $ref: '#/components/schemas/io.kserve.serving.v1alpha1.LLMInferenceService',
+        components: {
+          schemas: {
+            'io.kserve.serving.v1alpha1.LLMInferenceService': {
+              type: 'object',
+              properties: {
+                spec: {
+                  $ref: '/components/schemas/io.kserve.serving.v1alpha1.LLMInferenceServiceSpec',
+                },
+              },
+            },
+            'io.kserve.serving.v1alpha1.LLMInferenceServiceSpec': {
+              type: 'object',
+            },
+          },
+        },
+      }),
+    ).toEqual([
+      {
+        uri: 'file:///deployment-wizard-schema.json',
+        fileMatch: [DEPLOYMENT_WIZARD_YAML_MODEL_URI],
+        schema: {
+          type: 'object',
+          properties: {
+            spec: {
+              $ref: '#/components/schemas/io.kserve.serving.v1alpha1.LLMInferenceServiceSpec',
+            },
+          },
+          components: {
+            schemas: {
+              'io.kserve.serving.v1alpha1.LLMInferenceService': {
+                type: 'object',
+                properties: {
+                  spec: {
+                    $ref: '#/components/schemas/io.kserve.serving.v1alpha1.LLMInferenceServiceSpec',
+                  },
+                },
+              },
+              'io.kserve.serving.v1alpha1.LLMInferenceServiceSpec': {
+                type: 'object',
+              },
+            },
+          },
+        },
+      },
+    ]);
+  });
+
+  it('should return no schema registrations when schema context is incomplete', () => {
+    expect(buildDeploymentWizardYamlSchemas(null)).toEqual([]);
   });
 });

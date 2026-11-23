@@ -16,12 +16,14 @@ import {
 import { CodeIcon } from '@patternfly/react-icons';
 import { useThemeContext } from '@odh-dashboard/ui-core';
 import { EnterYAMLEditModal } from './EnterYAMLEditModal';
-import { YamlParseResult } from './yamlUtils';
+import { getKindReferenceFromYaml, YamlParseResult } from './yamlUtils';
 import {
+  buildDeploymentWizardYamlSchemas,
   configureDeploymentWizardMonacoYaml,
   DEPLOYMENT_WIZARD_YAML_MODEL_URI,
 } from './configureDeploymentWizardMonacoYaml';
 import { ensureMonacoYamlEnvironment } from './ensureMonacoYamlEnvironment';
+import { useKindSchema } from './useKindSchema';
 import { ModelDeploymentWizardViewMode } from '../ModelDeploymentWizard';
 
 // Configure this remote's Monaco loader + yaml worker before PF CodeEditor mounts.
@@ -52,6 +54,43 @@ export const DeploymentWizardYAMLView: React.FC<DeploymentWizardYAMLViewProps> =
   const monacoYamlRef = React.useRef<ReturnType<typeof configureDeploymentWizardMonacoYaml> | null>(
     null,
   );
+  const schemasRef = React.useRef<ReturnType<typeof buildDeploymentWizardYamlSchemas>>([]);
+  const lastValidKindReferenceRef = React.useRef(getKindReferenceFromYaml(code?.yaml));
+
+  const kindReference = React.useMemo(() => {
+    const parsedKindReference = getKindReferenceFromYaml(code?.yaml);
+    if (parsedKindReference) {
+      lastValidKindReferenceRef.current = parsedKindReference;
+    }
+    return parsedKindReference ?? lastValidKindReferenceRef.current;
+  }, [code?.yaml]);
+
+  const schemaKindReference = React.useMemo(
+    () =>
+      kindReference
+        ? {
+            group: kindReference.group,
+            version: kindReference.version,
+            kind: kindReference.kind,
+          }
+        : null,
+    [kindReference],
+  );
+
+  const lastValidSchemaRef = React.useRef<ReturnType<typeof useKindSchema>['schema']>(null);
+
+  const { schema, isLoaded } = useKindSchema(schemaKindReference);
+
+  if (schema) {
+    lastValidSchemaRef.current = schema;
+  }
+
+  const schemas = React.useMemo(
+    () => buildDeploymentWizardYamlSchemas(schema ?? lastValidSchemaRef.current),
+    [schema],
+  );
+
+  schemasRef.current = schemas;
 
   const handleBeforeMount = React.useCallback(
     (monacoInstance: Parameters<typeof configureDeploymentWizardMonacoYaml>[0]) => {
@@ -59,10 +98,20 @@ export const DeploymentWizardYAMLView: React.FC<DeploymentWizardYAMLViewProps> =
       // call below publishes this beforeMount instance on window.monaco afterwards.
       ensureMonacoYamlEnvironment();
       monacoYamlRef.current?.dispose();
-      monacoYamlRef.current = configureDeploymentWizardMonacoYaml(monacoInstance);
+      monacoYamlRef.current = configureDeploymentWizardMonacoYaml(monacoInstance, {
+        schemas: schemasRef.current,
+      });
     },
     [],
   );
+
+  React.useEffect(() => {
+    if (!isLoaded || !monacoYamlRef.current) {
+      return;
+    }
+
+    monacoYamlRef.current.update({ schemas });
+  }, [isLoaded, schemas]);
 
   React.useEffect(
     () => () => {
